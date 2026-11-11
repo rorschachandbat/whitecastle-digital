@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { StringTable } from '../src/ui/StringTable.js';
 import { validateCatalog } from '../src/data/catalog.js';
 
@@ -12,6 +13,8 @@ const required = [
   'docs/development-workflow.md', 'docs/sources.md', 'docs/deployment.md', 'docs/data-audit.md', 'docs/CHANGELOG.md',
   'src/game/CHANGELOG.md', 'src/ui/CHANGELOG.md', 'src/data/CHANGELOG.md', 'src/engine/CHANGELOG.md',
   'docs/engine-core.md',
+  'docs/card-castle-audit.md', 'docs/top-decree-audit.md', 'docs/training-pairing.md',
+  'docs/starting-card-audit.md',
   'scripts/CHANGELOG.md', 'tests/CHANGELOG.md', 'config-editor.html', 'data/whitecastle-2p.json',
 ];
 for (const name of required) {
@@ -20,7 +23,10 @@ for (const name of required) {
   }
 }
 
-const sourceFiles = ['src/main.js', 'src/ui/configEditor.js', 'src/engine/engine.js', 'src/data/catalog.js'];
+const sourceFiles = [
+  'src/main.js', 'src/ui/configEditor.js', 'src/engine/engine.js',
+  'src/engine/cardRules.js', 'src/engine/startingDraft.js', 'src/data/catalog.js',
+];
 const source = sourceFiles
   .map((name) => fs.readFileSync(path.join(root, name), 'utf8'))
   .join('\n');
@@ -54,6 +60,19 @@ const catalogErrors = validateCatalog(catalog);
 if (catalogErrors.length) {
   throw new Error(`数据目录校验失败：${catalogErrors.map(({ path: issuePath, code }) => `${issuePath}:${code}`).join(', ')}`);
 }
+// 原图不随仓库分发；本机存在时核对指纹，其他分支或克隆缺图时仍可校验规则数据。
+let checkedImages = 0;
+let absentImages = 0;
+for (const image of catalog.imageSources ?? []) {
+  const imagePath = path.resolve(root, image.path);
+  if (!fs.existsSync(imagePath)) {
+    absentImages += 1;
+    continue;
+  }
+  const actual = createHash('sha256').update(fs.readFileSync(imagePath)).digest('hex');
+  if (actual !== image.sha256) throw new Error(`原图指纹变化，请重新核验：${image.path}`);
+  checkedImages += 1;
+}
 
 // 只核验已存在文档的相对文件链接，不发起外网请求，也不推断标题锚点。
 const documents = [
@@ -75,3 +94,4 @@ for (const file of documents) {
   }
 }
 console.log(`项目结构、导入路径、${new Set(keys).size} 个界面文案键及 ${localLinkCount} 个文档本地链接检查通过。`);
+console.log(`原图指纹：${checkedImages} 份通过，${absentImages} 份未在本工作副本提供（不影响纯规则使用）。`);

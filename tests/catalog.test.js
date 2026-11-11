@@ -76,3 +76,14 @@ test('错误输入和过大导入文件被拒绝', () => {
   invalid.personalDomainRows[0].revealedGains = [null];
   assert.ok(validateCatalog(invalid).length > 0);
 });
+
+test('原图引用需存在于清单，版本不明训练面不能直接启用，起始行动布局不接受假行', () => {
+  const invalid = copy();
+  invalid.cards[0].sourceRef = 'image:missing-source#r1c1';
+  invalid.unclassifiedAssets[0].enabled = true;
+  invalid.cards.find((card) => card.kind === 'startingAction').fields[0].layoutRows = ['unknown'];
+  const codes = new Set(validateCatalog(invalid).map((issue) => issue.code));
+  assert.ok(codes.has('sourceRequired'));
+  assert.ok(codes.has('unclassifiedDisabled'));
+  assert.ok(codes.has('personalLayout'));
+});

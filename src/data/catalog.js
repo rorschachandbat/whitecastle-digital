@@ -1,3 +1,5 @@
+import { personalField } from '../engine/cardRules.js';
+
 export const GAIN_TYPES = Object.freeze(['food', 'iron', 'pearl', 'coin', 'seal', 'points', 'influence', 'lantern', 'chooseResource']);
 export const ACTION_TYPES = Object.freeze(['courtier', 'gardener', 'warrior', 'well', 'domain', 'castleAny', 'castleLight', 'castleCoral', 'castleBlack', 'castleWhite']);
 export const EFFECT_TYPES = Object.freeze([...GAIN_TYPES, ...ACTION_TYPES]);
@@ -24,16 +26,32 @@ export function validateCatalog(data) {
     if (ACTION_TYPES.includes(item?.type)) check(item.amount === 1, `${path}.amount`, 'actionAmount');
   };
   const effects = (items, path, cost = false) => array(items, path, 20).forEach((item, index) => effect(item, `${path}[${index}]`, cost));
+  const images = new Map();
+  const validSourceRef = (ref) => typeof ref === 'string' && (
+    /^https:\/\/[^/\s]+(?:\/[^\s]*)?$/.test(ref)
+    || /^image:([a-z][a-z0-9-]*)(?:#r[1-9]\d*c[1-9]\d*)?$/.test(ref)
+      && images.has(ref.slice(6).split('#')[0])
+  );
   const source = (item, path) => {
     check(typeof item.sourceRef === 'string' && item.sourceRef.length <= 2048, `${path}.sourceRef`, 'source');
     check(STATUS.has(item.verification), `${path}.verification`, 'status');
-    if (item.verification === 'confirmed') check(/^https:\/\//.test(item.sourceRef), `${path}.sourceRef`, 'sourceRequired');
+    if (item.verification === 'confirmed') check(validSourceRef(item.sourceRef), `${path}.sourceRef`, 'sourceRequired');
   };
   if (!data || typeof data !== 'object' || Array.isArray(data)) return [{ path: '$', code: 'object' }];
   check(data.schemaVersion === 1, 'schemaVersion', 'version');
   check(data.playerCount === 2, 'playerCount', 'twoPlayers');
   check(integer(data.revision, 1, 1000000), 'revision', 'revision');
   check(data.status === 'partial', 'status', 'partialOnly');
+  if (data.imageSources !== undefined) {
+    array(data.imageSources, 'imageSources', 200).forEach((image, index) => {
+      const ip = `imageSources[${index}]`;
+      check(id(image?.id) && !images.has(image?.id), `${ip}.id`, 'id');
+      check(typeof image?.path === 'string' && image.path.startsWith('src/原始图片/')
+        && !image.path.includes('..') && !image.path.includes('\\'), `${ip}.path`, 'imagePath');
+      check(typeof image?.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(image.sha256), `${ip}.sha256`, 'imageHash');
+      if (image?.id) images.set(image.id, image);
+    });
+  }
   check(data.limits?.resource === 7 && data.limits?.seal === 5, 'limits', 'rulesLimits');
   check([null, 'left', 'right'].includes(data.policy?.singleDieEndpoint), 'policy.singleDieEndpoint', 'endpoint');
   const ids = new Set();
@@ -64,11 +82,17 @@ export function validateCatalog(data) {
     unique(card, path);
     source(card, path);
     check(CARD_KINDS.includes(card.kind), `${path}.kind`, 'kind');
+    if (card.playerCounts !== undefined) {
+      check(Array.isArray(card.playerCounts) && card.playerCounts.length === 1
+        && card.playerCounts[0] === 2, `${path}.playerCounts`, 'twoPlayers');
+    }
+    if (card.backSourceRef !== undefined) check(validSourceRef(card.backSourceRef), `${path}.backSourceRef`, 'sourceRequired');
+    if (card.excludedInTwoPlayers !== undefined) check(card.excludedInTwoPlayers === false, `${path}.excludedInTwoPlayers`, 'excludedCard');
     if (['plant', 'stone'].includes(card.kind)) {
       check(integer(card.foodCost) && integer(card.victoryPoints), path, 'gardenValues');
     }
     const fields = array(card.fields, `${path}.fields`, 10);
-    check(fields.length > 0, `${path}.fields`, 'empty');
+    check(fields.length > 0 || ['startingResource', 'decree'].includes(card.kind), `${path}.fields`, 'empty');
     const fieldIds = new Set();
     fields.forEach((field, j) => {
       const fp = `${path}.fields[${j}]`;
@@ -80,6 +104,29 @@ export function validateCatalog(data) {
       effects(field.effects, `${fp}.effects`);
     });
     effects(card.back, `${path}.back`);
+    if (['startingAction', 'steward', 'diplomat'].includes(card.kind)) {
+      try {
+        for (const row of ['courtier', 'gardener', 'warrior']) personalField(card, row);
+      } catch { check(false, `${path}.fields`, 'personalLayout'); }
+    }
+    if (card.kind === 'startingResource') {
+      const initial = array(card.initialGains, `${path}.initialGains`, 20);
+      check(initial.length > 0, `${path}.initialGains`, 'empty');
+      initial.forEach((item, index) => {
+        effect(item, `${path}.initialGains[${index}]`);
+        check(['food', 'iron', 'pearl', 'coin', 'seal', 'chooseResource'].includes(item?.type),
+          `${path}.initialGains[${index}].type`, 'initialGain');
+      });
+      if (card.grantDecreeId !== undefined) {
+        check(Array.isArray(data.cards) && data.cards.some((other) => other?.id === card.grantDecreeId
+          && other.kind === 'decree' && other.verification === 'confirmed'), `${path}.grantDecreeId`, 'decreeReference');
+      }
+    }
+    if (card.kind === 'decree') check(fields.length === 0 && Array.isArray(card.back) && card.back.length === 1
+      && ['coin', 'seal', 'points'].includes(card.back[0]?.type), path, 'decree');
+    if (card.kind === 'top') check(fields.length === 3 && card.selection === 'oneEmptySlot'
+      && ['left', 'middle', 'right'].every((slot) => fields.some((item) => item?.id === slot && item.capacity === 1)),
+    `${path}.fields`, 'topSlots');
   });
   const faceIds = new Set();
   const faceTones = new Map();
@@ -90,6 +137,7 @@ export function validateCatalog(data) {
     faceIds.add(face.id);
     faceTones.set(face.id, face.tone);
     source(face, path);
+    if (face.additionalSourceRef !== undefined) check(validSourceRef(face.additionalSourceRef), `${path}.additionalSourceRef`, 'sourceRequired');
     check(['resource', 'action'].includes(face.tone), `${path}.tone`, 'tone');
     effects(face.cost, `${path}.cost`, true);
     effects(face.effects, `${path}.effects`);
@@ -112,6 +160,32 @@ export function validateCatalog(data) {
       check(tones.includes('action') && tones.includes('resource'), `${path}.faceIds`, 'faceSides');
     }
   });
+  if (data.trainingZones !== undefined) {
+    const zones = array(data.trainingZones, 'trainingZones', 3);
+    check(zones.length === 3, 'trainingZones', 'threeZones');
+    zones.forEach((zone, i) => {
+      const zp = `trainingZones[${i}]`;
+      if (!zone || typeof zone !== 'object') return check(false, zp, 'object');
+      unique(zone, zp);
+      source(zone, zp);
+      check(integer(zone.ironCost, 1, 7) && integer(zone.value, 1, 7), zp, 'zoneValues');
+      check(Array.isArray(zone.faceTones) && zone.faceTones.length >= 1 && zone.faceTones.length <= 2
+        && new Set(zone.faceTones).size === zone.faceTones.length
+        && zone.faceTones.every((tone) => ['action', 'resource'].includes(tone)), `${zp}.faceTones`, 'zoneFaces');
+    });
+  }
+  if (data.unclassifiedAssets !== undefined) {
+    array(data.unclassifiedAssets, 'unclassifiedAssets', 32).forEach((asset, i) => {
+      const ap = `unclassifiedAssets[${i}]`;
+      if (!asset || typeof asset !== 'object') return check(false, ap, 'object');
+      unique(asset, ap);
+      check(asset.enabled === false && asset.verification === 'pending', ap, 'unclassifiedDisabled');
+      check(validSourceRef(asset.sourceRef), `${ap}.sourceRef`, 'sourceRequired');
+      // observedEffects 是图片观察记录，不能作为基础版效果交给引擎执行。
+      check(Array.isArray(asset.observedEffects) && asset.observedEffects.length > 0,
+        `${ap}.observedEffects`, 'observedEffects');
+    });
+  }
   return errors;
 }
 

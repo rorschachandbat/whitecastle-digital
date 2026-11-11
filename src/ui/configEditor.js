@@ -24,7 +24,7 @@ const list = el('div', null, 'component-list');
 const detail = el('section', null, 'panel component-detail');
 const filter = document.createElement('select');
 filter.setAttribute('aria-label', text('editor.filter'));
-for (const kind of ['all', 'plant', 'stone', 'row', 'face', 'token']) {
+for (const kind of ['all', 'startingAction', 'startingResource', 'decree', 'steward', 'diplomat', 'top', 'plant', 'stone', 'row', 'face', 'token', 'zone']) {
   const option = el('option', kind === 'all' ? 'editor.all' : `editor.kind.${kind}`);
   option.value = kind;
   filter.append(option);
@@ -72,6 +72,7 @@ function allEntries() {
     ...data.cards.map((item, i) => ({ item, kind: item.kind, path: ['cards', i] })),
     ...data.yardFaces.map((item, i) => ({ item, kind: 'face', path: ['yardFaces', i] })),
     ...data.tokens.map((item, i) => ({ item, kind: 'token', path: ['tokens', i] })),
+    ...(data.trainingZones ?? []).map((item, i) => ({ item, kind: 'zone', path: ['trainingZones', i] })),
   ];
 }
 
@@ -186,12 +187,20 @@ function preview(item, kind) {
     });
   } else if (kind === 'token') {
     line('editor.faceIds', item.faceIds.join(' / ') || text('editor.pending'));
+  } else if (kind === 'zone') {
+    line('editor.ironCost', item.ironCost);
+    line('editor.warriorValue', item.value);
+    line('editor.faceTones', item.faceTones.map((tone) => text(`editor.tone.${tone}`)).join(' / '));
   } else {
+    if (item.initialGains) line('editor.initialGains', effectSummary(item.initialGains));
+    if (item.grantDecreeId) line('editor.grantDecree', item.grantDecreeId);
+    if (item.copy) line('editor.copy', `${item.designId} / ${item.copy}`);
     if (['plant', 'stone'].includes(kind)) {
       line('editor.foodCost', item.foodCost);
       line('editor.victoryPoints', item.victoryPoints);
     }
     for (const field of item.fields ?? [item]) {
+      if (field.layoutRows) line('editor.layoutRows', field.layoutRows.map((row) => text(`editor.row.${row}`)).join(' / '));
       line(`editor.tone.${field.tone}`, effectSummary(field.effects));
       if (field.cost.length) line('editor.cost', effectSummary(field.cost));
     }
@@ -219,7 +228,7 @@ function renderDetail() {
   field(detail, 'editor.status', status);
   const source = document.createElement('input');
   source.value = draft.sourceRef;
-  source.type = 'url';
+  source.type = 'text';
   source.addEventListener('input', () => { draft.sourceRef = source.value; dirty = true; });
   field(detail, 'editor.source', source);
   if (current.kind === 'row') {
@@ -232,6 +241,9 @@ function renderDetail() {
       gains(group, 'editor.effects', [gain], (values) => { draft.revealedGains[i] = values[0]; }, false, true);
       detail.append(group);
     });
+  } else if (current.kind === 'zone') {
+    number(detail, 'editor.ironCost', draft.ironCost, (value) => { draft.ironCost = value; });
+    number(detail, 'editor.warriorValue', draft.value, (value) => { draft.value = value; });
   } else if (current.kind === 'token') {
     detail.append(el('p', 'editor.pairNotice'));
     const chosen = [draft.faceIds[0] ?? '', draft.faceIds[1] ?? ''];
@@ -255,6 +267,26 @@ function renderDetail() {
       field(detail, 'editor.faceIds', select);
     }
   } else {
+    if (current.kind === 'startingResource') {
+      gains(detail, 'editor.initialGains', draft.initialGains, (items) => { draft.initialGains = items; });
+      const decree = document.createElement('select');
+      const empty = el('option', 'editor.none');
+      empty.value = '';
+      decree.append(empty);
+      for (const card of data.cards.filter((item) => item.kind === 'decree')) {
+        const option = el('option');
+        option.value = card.id;
+        option.textContent = `${card.id} · ${effectSummary(card.back)}`;
+        decree.append(option);
+      }
+      decree.value = draft.grantDecreeId ?? '';
+      decree.addEventListener('change', () => {
+        if (decree.value) draft.grantDecreeId = decree.value;
+        else delete draft.grantDecreeId;
+        dirty = true;
+      });
+      field(detail, 'editor.grantDecree', decree);
+    }
     if (['plant', 'stone'].includes(current.kind)) {
       number(detail, 'editor.foodCost', draft.foodCost, (value) => { draft.foodCost = value; });
       number(detail, 'editor.victoryPoints', draft.victoryPoints, (value) => { draft.victoryPoints = value; });
@@ -381,6 +413,7 @@ button('editor.applyJson', () => {
 }, details);
 button('editor.undo', () => { advanced.value = JSON.stringify(data, null, 2); advancedDirty = false; }, details);
 root.append(title, el('p', 'editor.intro'), el('p', 'editor.scope'), message);
+root.append(el('p', 'editor.extraFaces'));
 const revField = el('div');
 field(revField, 'editor.revision', revision);
 revField.append(el('p', 'editor.revisionHint'), el('p', 'editor.fingerprint'), hash);

@@ -17,6 +17,7 @@ const routes = new Map([
   ['/src/ui/StringTable.js', ['src/ui/StringTable.js', 'text/javascript']],
   ['/src/ui/styles.css', ['src/ui/styles.css', 'text/css']],
   ['/src/data/catalog.js', ['src/data/catalog.js', 'text/javascript']],
+  ['/src/engine/cardRules.js', ['src/engine/cardRules.js', 'text/javascript']],
 ]);
 const server = http.createServer(async (request, response) => {
   const target = routes.get(new URL(request.url, 'http://127.0.0.1').pathname);

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": 1,
+  "revision": 2,
   "playerCount": 2,
   "status": "partial",
   "limits": {
@@ -359,6 +359,2158 @@
       ],
       "back": [],
       "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_62.png"
+    },
+    {
+      "id": "start-resource-food-1",
+      "kind": "startingResource",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-resource-food#r1c1",
+      "fields": [],
+      "back": [
+        {
+          "type": "food",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:start-resource-food-back",
+      "initialGains": [
+        {
+          "type": "chooseResource",
+          "amount": 1
+        },
+        {
+          "type": "coin",
+          "amount": 2
+        },
+        {
+          "type": "seal",
+          "amount": 2
+        }
+      ],
+      "grantDecreeId": "decree-points"
+    },
+    {
+      "id": "start-resource-food-2",
+      "kind": "startingResource",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-resource-food#r1c2",
+      "fields": [],
+      "back": [
+        {
+          "type": "food",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:start-resource-food-back",
+      "initialGains": [
+        {
+          "type": "food",
+          "amount": 2
+        },
+        {
+          "type": "iron",
+          "amount": 2
+        },
+        {
+          "type": "pearl",
+          "amount": 1
+        },
+        {
+          "type": "coin",
+          "amount": 4
+        },
+        {
+          "type": "seal",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "start-resource-food-3",
+      "kind": "startingResource",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-resource-food#r2c1",
+      "fields": [],
+      "back": [
+        {
+          "type": "food",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:start-resource-food-back",
+      "initialGains": [
+        {
+          "type": "food",
+          "amount": 4
+        },
+        {
+          "type": "iron",
+          "amount": 2
+        },
+        {
+          "type": "coin",
+          "amount": 3
+        },
+        {
+          "type": "seal",
+          "amount": 2
+        }
+      ]
+    },
+    {
+      "id": "start-resource-iron-1",
+      "kind": "startingResource",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-resource-iron#r1c1",
+      "fields": [],
+      "back": [
+        {
+          "type": "iron",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:start-resource-iron-back",
+      "initialGains": [
+        {
+          "type": "food",
+          "amount": 1
+        },
+        {
+          "type": "iron",
+          "amount": 2
+        },
+        {
+          "type": "pearl",
+          "amount": 1
+        },
+        {
+          "type": "coin",
+          "amount": 3
+        },
+        {
+          "type": "seal",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "start-resource-iron-2",
+      "kind": "startingResource",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-resource-iron#r1c2",
+      "fields": [],
+      "back": [
+        {
+          "type": "iron",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:start-resource-iron-back",
+      "initialGains": [
+        {
+          "type": "pearl",
+          "amount": 2
+        },
+        {
+          "type": "iron",
+          "amount": 1
+        },
+        {
+          "type": "coin",
+          "amount": 4
+        }
+      ],
+      "grantDecreeId": "decree-seal"
+    },
+    {
+      "id": "start-resource-iron-3",
+      "kind": "startingResource",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-resource-iron#r2c1",
+      "fields": [],
+      "back": [
+        {
+          "type": "iron",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:start-resource-iron-back",
+      "initialGains": [
+        {
+          "type": "chooseResource",
+          "amount": 3
+        },
+        {
+          "type": "coin",
+          "amount": 4
+        },
+        {
+          "type": "seal",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "start-resource-pearl-1",
+      "kind": "startingResource",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-resource-pearl#r1c1",
+      "fields": [],
+      "back": [
+        {
+          "type": "pearl",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:start-resource-pearl-back",
+      "initialGains": [
+        {
+          "type": "food",
+          "amount": 2
+        },
+        {
+          "type": "iron",
+          "amount": 1
+        },
+        {
+          "type": "coin",
+          "amount": 2
+        },
+        {
+          "type": "seal",
+          "amount": 1
+        }
+      ],
+      "grantDecreeId": "decree-coin"
+    },
+    {
+      "id": "start-resource-pearl-2",
+      "kind": "startingResource",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-resource-pearl#r1c2",
+      "fields": [],
+      "back": [
+        {
+          "type": "pearl",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:start-resource-pearl-back",
+      "initialGains": [
+        {
+          "type": "chooseResource",
+          "amount": 2
+        },
+        {
+          "type": "coin",
+          "amount": 4
+        },
+        {
+          "type": "seal",
+          "amount": 2
+        }
+      ]
+    },
+    {
+      "id": "start-resource-pearl-3",
+      "kind": "startingResource",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-resource-pearl#r2c1",
+      "fields": [],
+      "back": [
+        {
+          "type": "pearl",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:start-resource-pearl-back",
+      "initialGains": [
+        {
+          "type": "iron",
+          "amount": 2
+        },
+        {
+          "type": "pearl",
+          "amount": 1
+        },
+        {
+          "type": "coin",
+          "amount": 5
+        },
+        {
+          "type": "seal",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "start-action-courtier-1",
+      "kind": "startingAction",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-action-courtier",
+      "fields": [
+        {
+          "id": "action",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "courtier",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier",
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "influence",
+          "amount": 1
+        }
+      ],
+      "designId": "start-action-courtier",
+      "copy": 1,
+      "backSourceRef": "image:start-action-back",
+      "quantitySource": "user-confirmed-2026-11-11"
+    },
+    {
+      "id": "start-action-courtier-2",
+      "kind": "startingAction",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-action-courtier",
+      "fields": [
+        {
+          "id": "action",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "courtier",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier",
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "influence",
+          "amount": 1
+        }
+      ],
+      "designId": "start-action-courtier",
+      "copy": 2,
+      "backSourceRef": "image:start-action-back",
+      "quantitySource": "user-confirmed-2026-11-11"
+    },
+    {
+      "id": "start-action-warrior-1",
+      "kind": "startingAction",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-action-warrior",
+      "fields": [
+        {
+          "id": "action",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "warrior",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier",
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "influence",
+          "amount": 1
+        }
+      ],
+      "designId": "start-action-warrior",
+      "copy": 1,
+      "backSourceRef": "image:start-action-back",
+      "quantitySource": "user-confirmed-2026-11-11"
+    },
+    {
+      "id": "start-action-warrior-2",
+      "kind": "startingAction",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-action-warrior",
+      "fields": [
+        {
+          "id": "action",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "warrior",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier",
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "influence",
+          "amount": 1
+        }
+      ],
+      "designId": "start-action-warrior",
+      "copy": 2,
+      "backSourceRef": "image:start-action-back",
+      "quantitySource": "user-confirmed-2026-11-11"
+    },
+    {
+      "id": "start-action-gardener-1",
+      "kind": "startingAction",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-action-gardener",
+      "fields": [
+        {
+          "id": "action",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier",
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "influence",
+          "amount": 1
+        }
+      ],
+      "designId": "start-action-gardener",
+      "copy": 1,
+      "backSourceRef": "image:start-action-back",
+      "quantitySource": "user-confirmed-2026-11-11"
+    },
+    {
+      "id": "start-action-gardener-2",
+      "kind": "startingAction",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:start-action-gardener",
+      "fields": [
+        {
+          "id": "action",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier",
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "influence",
+          "amount": 1
+        }
+      ],
+      "designId": "start-action-gardener",
+      "copy": 2,
+      "backSourceRef": "image:start-action-back",
+      "quantitySource": "user-confirmed-2026-11-11"
+    },
+    {
+      "id": "decree-points",
+      "kind": "decree",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:decree-points",
+      "fields": [],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "orientation": "lanternOnly"
+    },
+    {
+      "id": "decree-seal",
+      "kind": "decree",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:decree-seal",
+      "fields": [],
+      "back": [
+        {
+          "type": "seal",
+          "amount": 1
+        }
+      ],
+      "orientation": "lanternOnly"
+    },
+    {
+      "id": "decree-coin",
+      "kind": "decree",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:decree-coin",
+      "fields": [],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "orientation": "lanternOnly"
+    },
+    {
+      "id": "steward-s02",
+      "kind": "steward",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:steward-sheet#r1c2",
+      "fields": [
+        {
+          "id": "top",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "middle",
+          "tone": "dark",
+          "cost": [
+            {
+              "type": "seal",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener"
+          ]
+        },
+        {
+          "id": "bottom",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "food",
+              "amount": 2
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:steward-back",
+      "sourcePosition": 2,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "steward-s03",
+      "kind": "steward",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:steward-sheet#r1c3",
+      "fields": [
+        {
+          "id": "top",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "middle",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "pearl",
+              "amount": 2
+            }
+          ],
+          "layoutRows": [
+            "gardener"
+          ]
+        },
+        {
+          "id": "bottom",
+          "tone": "dark",
+          "cost": [
+            {
+              "type": "seal",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "type": "warrior",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:steward-back",
+      "sourcePosition": 3,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "steward-s04",
+      "kind": "steward",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:steward-sheet#r1c4",
+      "fields": [
+        {
+          "id": "top",
+          "tone": "dark",
+          "cost": [
+            {
+              "type": "seal",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "type": "warrior",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "middle",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "coin",
+              "amount": 1
+            },
+            {
+              "type": "well",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener"
+          ]
+        },
+        {
+          "id": "bottom",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "lantern",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:steward-back",
+      "sourcePosition": 4,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "steward-s05",
+      "kind": "steward",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:steward-sheet#r2c1",
+      "fields": [
+        {
+          "id": "top",
+          "tone": "dark",
+          "cost": [
+            {
+              "type": "seal",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "type": "courtier",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "middle",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener"
+          ]
+        },
+        {
+          "id": "bottom",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "iron",
+              "amount": 2
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:steward-back",
+      "sourcePosition": 5,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "steward-s06",
+      "kind": "steward",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:steward-sheet#r2c2",
+      "fields": [
+        {
+          "id": "top",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "coin",
+              "amount": 1
+            },
+            {
+              "type": "well",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "middle",
+          "tone": "dark",
+          "cost": [
+            {
+              "type": "seal",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "type": "courtier",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener"
+          ]
+        },
+        {
+          "id": "bottom",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "food",
+              "amount": 2
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:steward-back",
+      "sourcePosition": 6,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "steward-s08",
+      "kind": "steward",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:steward-sheet#r2c4",
+      "fields": [
+        {
+          "id": "top",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "seal",
+              "amount": 1
+            },
+            {
+              "type": "chooseResource",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "middle",
+          "tone": "dark",
+          "cost": [
+            {
+              "type": "seal",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "type": "courtier",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener"
+          ]
+        },
+        {
+          "id": "bottom",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "iron",
+              "amount": 1
+            },
+            {
+              "type": "food",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:steward-back",
+      "sourcePosition": 8,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "steward-s10",
+      "kind": "steward",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:steward-sheet#r3c2",
+      "fields": [
+        {
+          "id": "top",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "iron",
+              "amount": 2
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "middle",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "lantern",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener"
+          ]
+        },
+        {
+          "id": "bottom",
+          "tone": "dark",
+          "cost": [
+            {
+              "type": "seal",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:steward-back",
+      "sourcePosition": 10,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "steward-s14",
+      "kind": "steward",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:steward-sheet#r4c2",
+      "fields": [
+        {
+          "id": "top",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "pearl",
+              "amount": 2
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "middle",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "seal",
+              "amount": 1
+            },
+            {
+              "type": "points",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener"
+          ]
+        },
+        {
+          "id": "bottom",
+          "tone": "dark",
+          "cost": [
+            {
+              "type": "seal",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:steward-back",
+      "sourcePosition": 14,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "steward-s15",
+      "kind": "steward",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:steward-sheet#r4c3",
+      "fields": [
+        {
+          "id": "top",
+          "tone": "dark",
+          "cost": [
+            {
+              "type": "seal",
+              "amount": 1
+            }
+          ],
+          "effects": [
+            {
+              "type": "warrior",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "middle",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "food",
+              "amount": 1
+            },
+            {
+              "type": "pearl",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener"
+          ]
+        },
+        {
+          "id": "bottom",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "iron",
+              "amount": 1
+            },
+            {
+              "type": "lantern",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "coin",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:steward-back",
+      "sourcePosition": 15,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "diplomat-d01",
+      "kind": "diplomat",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:diplomat-sheet#r1c1",
+      "fields": [
+        {
+          "id": "upper",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "points",
+              "amount": 2
+            },
+            {
+              "type": "well",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "lower",
+          "tone": "dark",
+          "cost": [],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:diplomat-back",
+      "rowSpan": [
+        1,
+        2
+      ],
+      "sourcePosition": 1,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "diplomat-d02",
+      "kind": "diplomat",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:diplomat-sheet#r1c2",
+      "fields": [
+        {
+          "id": "upper",
+          "tone": "dark",
+          "cost": [],
+          "effects": [
+            {
+              "type": "courtier",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "lower",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "points",
+              "amount": 2
+            },
+            {
+              "type": "well",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:diplomat-back",
+      "rowSpan": [
+        1,
+        2
+      ],
+      "sourcePosition": 2,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "diplomat-d03",
+      "kind": "diplomat",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:diplomat-sheet#r1c3",
+      "fields": [
+        {
+          "id": "upper",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "coin",
+              "amount": 2
+            },
+            {
+              "type": "lantern",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier",
+            "gardener"
+          ]
+        },
+        {
+          "id": "lower",
+          "tone": "dark",
+          "cost": [],
+          "effects": [
+            {
+              "type": "warrior",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:diplomat-back",
+      "rowSpan": [
+        2,
+        1
+      ],
+      "sourcePosition": 3,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "diplomat-d04",
+      "kind": "diplomat",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:diplomat-sheet#r2c1",
+      "fields": [
+        {
+          "id": "upper",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 1
+            },
+            {
+              "type": "lantern",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier",
+            "gardener"
+          ]
+        },
+        {
+          "id": "lower",
+          "tone": "dark",
+          "cost": [],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:diplomat-back",
+      "rowSpan": [
+        2,
+        1
+      ],
+      "sourcePosition": 4,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "diplomat-d05",
+      "kind": "diplomat",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:diplomat-sheet#r2c2",
+      "fields": [
+        {
+          "id": "upper",
+          "tone": "dark",
+          "cost": [],
+          "effects": [
+            {
+              "type": "courtier",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "lower",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 2
+            }
+          ],
+          "layoutRows": [
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:diplomat-back",
+      "rowSpan": [
+        1,
+        2
+      ],
+      "sourcePosition": 5,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "diplomat-d07",
+      "kind": "diplomat",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:diplomat-sheet#r3c1",
+      "fields": [
+        {
+          "id": "upper",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 2
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "lower",
+          "tone": "dark",
+          "cost": [],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:diplomat-back",
+      "rowSpan": [
+        1,
+        2
+      ],
+      "sourcePosition": 7,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "diplomat-d09",
+      "kind": "diplomat",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:diplomat-sheet#r3c3",
+      "fields": [
+        {
+          "id": "upper",
+          "tone": "dark",
+          "cost": [],
+          "effects": [
+            {
+              "type": "warrior",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "lower",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "chooseResource",
+              "amount": 3
+            }
+          ],
+          "layoutRows": [
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:diplomat-back",
+      "rowSpan": [
+        1,
+        2
+      ],
+      "sourcePosition": 9,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "diplomat-d11",
+      "kind": "diplomat",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:diplomat-sheet#r4c2",
+      "fields": [
+        {
+          "id": "upper",
+          "tone": "dark",
+          "cost": [],
+          "effects": [
+            {
+              "type": "warrior",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "lower",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 2
+            }
+          ],
+          "layoutRows": [
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:diplomat-back",
+      "rowSpan": [
+        1,
+        2
+      ],
+      "sourcePosition": 11,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "diplomat-d12",
+      "kind": "diplomat",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:diplomat-sheet#r4c3",
+      "fields": [
+        {
+          "id": "upper",
+          "tone": "dark",
+          "cost": [],
+          "effects": [
+            {
+              "type": "courtier",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "courtier"
+          ]
+        },
+        {
+          "id": "lower",
+          "tone": "light",
+          "cost": [],
+          "effects": [
+            {
+              "type": "seal",
+              "amount": 1
+            },
+            {
+              "type": "lantern",
+              "amount": 1
+            }
+          ],
+          "layoutRows": [
+            "gardener",
+            "warrior"
+          ]
+        }
+      ],
+      "back": [
+        {
+          "type": "points",
+          "amount": 1
+        }
+      ],
+      "backSourceRef": "image:diplomat-back",
+      "rowSpan": [
+        1,
+        2
+      ],
+      "sourcePosition": 12,
+      "excludedInTwoPlayers": false
+    },
+    {
+      "id": "top-1",
+      "kind": "top",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:top-1",
+      "fields": [
+        {
+          "id": "left",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "middle",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "pearl",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "right",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "coin",
+              "amount": 3
+            }
+          ],
+          "capacity": 1
+        }
+      ],
+      "back": [],
+      "selection": "oneEmptySlot"
+    },
+    {
+      "id": "top-2",
+      "kind": "top",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:top-2",
+      "fields": [
+        {
+          "id": "left",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "domain",
+              "amount": 1
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "middle",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "iron",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "right",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "coin",
+              "amount": 3
+            }
+          ],
+          "capacity": 1
+        }
+      ],
+      "back": [],
+      "selection": "oneEmptySlot"
+    },
+    {
+      "id": "top-3",
+      "kind": "top",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:top-3",
+      "fields": [
+        {
+          "id": "left",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "well",
+              "amount": 1
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "middle",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "right",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "coin",
+              "amount": 3
+            }
+          ],
+          "capacity": 1
+        }
+      ],
+      "back": [],
+      "selection": "oneEmptySlot"
+    },
+    {
+      "id": "top-4",
+      "kind": "top",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:top-4",
+      "fields": [
+        {
+          "id": "left",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "domain",
+              "amount": 1
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "middle",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "right",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "seal",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        }
+      ],
+      "back": [],
+      "selection": "oneEmptySlot"
+    },
+    {
+      "id": "top-5",
+      "kind": "top",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:top-5",
+      "fields": [
+        {
+          "id": "left",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "domain",
+              "amount": 1
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "middle",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "pearl",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "right",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "points",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        }
+      ],
+      "back": [],
+      "selection": "oneEmptySlot"
+    },
+    {
+      "id": "top-6",
+      "kind": "top",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:top-6",
+      "fields": [
+        {
+          "id": "left",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "middle",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "points",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "right",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "seal",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        }
+      ],
+      "back": [],
+      "selection": "oneEmptySlot"
+    },
+    {
+      "id": "top-7",
+      "kind": "top",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:top-7",
+      "fields": [
+        {
+          "id": "left",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "middle",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "food",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "right",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "influence",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        }
+      ],
+      "back": [],
+      "selection": "oneEmptySlot"
+    },
+    {
+      "id": "top-8",
+      "kind": "top",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:top-8",
+      "fields": [
+        {
+          "id": "left",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "well",
+              "amount": 1
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "middle",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "food",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "right",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "points",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        }
+      ],
+      "back": [],
+      "selection": "oneEmptySlot"
+    },
+    {
+      "id": "top-9",
+      "kind": "top",
+      "verification": "confirmed",
+      "playerCounts": [
+        2
+      ],
+      "sourceRef": "image:top-9",
+      "fields": [
+        {
+          "id": "left",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "well",
+              "amount": 1
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "middle",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "iron",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        },
+        {
+          "id": "right",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "seal",
+              "amount": 2
+            }
+          ],
+          "capacity": 1
+        }
+      ],
+      "back": [],
+      "selection": "oneEmptySlot"
     }
   ],
   "yardFaces": [
@@ -373,7 +2525,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard1.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard1.png",
+      "additionalSourceRef": "image:training-asset-2153342442631897865"
     },
     {
       "id": "yard-face-2",
@@ -386,7 +2539,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard2.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard2.png",
+      "additionalSourceRef": "image:training-asset-2153342442631897681"
     },
     {
       "id": "yard-face-3",
@@ -399,7 +2553,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard3.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard3.png",
+      "additionalSourceRef": "image:training-asset-2153342442631897741"
     },
     {
       "id": "yard-face-4",
@@ -412,7 +2567,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard4.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard4.png",
+      "additionalSourceRef": "image:training-asset-2153342442631897935"
     },
     {
       "id": "yard-face-5",
@@ -425,7 +2581,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard5.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard5.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898019"
     },
     {
       "id": "yard-face-6",
@@ -438,7 +2595,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard6.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard6.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898096"
     },
     {
       "id": "yard-face-7",
@@ -451,7 +2609,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard7.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard7.png",
+      "additionalSourceRef": "image:training-asset-2153342442631897801"
     },
     {
       "id": "yard-face-8",
@@ -464,7 +2623,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard8.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard8.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898178"
     },
     {
       "id": "yard-face-9",
@@ -477,7 +2637,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard9.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard9.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898454"
     },
     {
       "id": "yard-face-10",
@@ -490,7 +2651,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard10.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard10.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898606"
     },
     {
       "id": "yard-face-11",
@@ -503,7 +2665,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard11.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard11.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898793"
     },
     {
       "id": "yard-face-12",
@@ -516,7 +2679,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard12.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard12.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898385"
     },
     {
       "id": "yard-face-13",
@@ -529,7 +2693,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard13.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard13.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898309"
     },
     {
       "id": "yard-face-14",
@@ -542,7 +2707,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard14.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard14.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898251"
     },
     {
       "id": "yard-face-15",
@@ -555,7 +2721,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard15.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard15.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898527"
     },
     {
       "id": "yard-face-16",
@@ -568,7 +2735,8 @@
         }
       ],
       "verification": "confirmed",
-      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard16.png"
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard16.png",
+      "additionalSourceRef": "image:training-asset-2153342442631898740"
     }
   ],
   "tokens": [
@@ -634,11 +2802,314 @@
   "coverage": {
     "plant": 5,
     "stone": 5,
-    "startingResource": null,
-    "startingAction": null,
-    "steward": null,
-    "diplomat": null,
-    "top": null,
-    "decree": null
+    "startingResource": 9,
+    "startingAction": 6,
+    "steward": 9,
+    "diplomat": 9,
+    "top": 9,
+    "decree": 3
+  },
+  "imageSources": [
+    {
+      "id": "start-resource-food",
+      "path": "src/原始图片/起始资源卡牌，都是3x3排列，最后一张是黑色/卡1正面.jpg",
+      "sha256": "b617862365d50f17b11460fc804872112086974250aafb4e47d6cb00ee02739f"
+    },
+    {
+      "id": "start-resource-food-back",
+      "path": "src/原始图片/起始资源卡牌，都是3x3排列，最后一张是黑色/卡1背面.jpg",
+      "sha256": "6f1100e529c46616b38cd0e476a6078408164954d6795a57f1882c5c7c69b383"
+    },
+    {
+      "id": "start-resource-iron",
+      "path": "src/原始图片/起始资源卡牌，都是3x3排列，最后一张是黑色/卡2正面.jpg",
+      "sha256": "89a355abec8694b78c7b42bdb3e73e21b334e97c3eda75e8153918f77694fa9b"
+    },
+    {
+      "id": "start-resource-iron-back",
+      "path": "src/原始图片/起始资源卡牌，都是3x3排列，最后一张是黑色/卡2背面.jpg",
+      "sha256": "5ab142589b2c48ebf2dc65d1d7e7fb945c288ac3721323b5e9169d835cab9b5d"
+    },
+    {
+      "id": "start-resource-pearl",
+      "path": "src/原始图片/起始资源卡牌，都是3x3排列，最后一张是黑色/卡3正面.jpg",
+      "sha256": "e1831864248f5463f53aae1f373a7d0032ddccd6f6b7f46726ff2e34def2685d"
+    },
+    {
+      "id": "start-resource-pearl-back",
+      "path": "src/原始图片/起始资源卡牌，都是3x3排列，最后一张是黑色/卡3背面.jpg",
+      "sha256": "8ea5e5a5fc1e86a9245525f9c626a9a830d079644bf74f4fce96eb24dbda98b7"
+    },
+    {
+      "id": "start-action-back",
+      "path": "src/原始图片/起始行动卡/卡背面.jpg",
+      "sha256": "085f994296bd8afc83db027239180d0b578ca0b5145f3c7191c336c0cb8610a4"
+    },
+    {
+      "id": "start-action-courtier",
+      "path": "src/原始图片/起始行动卡/卡1正面.jpg",
+      "sha256": "3e86a376f260a8e6687b0455474b27c665d240f3625ac29f14bbc6ae0b89bdcf"
+    },
+    {
+      "id": "start-action-warrior",
+      "path": "src/原始图片/起始行动卡/卡2正面.jpg",
+      "sha256": "642e8df8a6ad4df546ead3b0593645984fe10c0a6757747b26d742b57f829c57"
+    },
+    {
+      "id": "start-action-gardener",
+      "path": "src/原始图片/起始行动卡/卡3正面.jpg",
+      "sha256": "b6c55f10f82dff45fc1496a79de454c2d1ddad9f1e6071cb6969bab4657fcc95"
+    },
+    {
+      "id": "decree-points",
+      "path": "src/原始图片/法令卡牌/httpssteamusercontentaakamaihdnetugc2153342442641512388338A547899A2AAA28123B9C95DCFDBBB77CE1272.jpg",
+      "sha256": "8fe4aeee86cca25a2a405d033e23d2aa9b4eef99f44d346279a2efa8acb98c65"
+    },
+    {
+      "id": "decree-seal",
+      "path": "src/原始图片/法令卡牌/httpssteamusercontentaakamaihdnetugc2153342442641512462584E9497099D300E0B0DD507221B23C672134D85.jpg",
+      "sha256": "9a4d8db570787e258e3a3b151015ba0434f2786c01dbcc5cf8be0a32938fea54"
+    },
+    {
+      "id": "decree-coin",
+      "path": "src/原始图片/法令卡牌/httpssteamusercontentaakamaihdnetugc21533424426415125447B50385464E92002614B47FC362D9AB7C3366AD6.jpg",
+      "sha256": "3b344e443f8ec594cb30d24c42f887b86bd5447bd7d02341c0bdb9298186944b"
+    },
+    {
+      "id": "steward-sheet",
+      "path": "src/原始图片/15张地头卡，4x4排列，最后一张是黑的.jpg",
+      "sha256": "c27e94507efafb219710370aa8de238dcd26a3249b11fb747cbd64405916b44e"
+    },
+    {
+      "id": "steward-back",
+      "path": "src/原始图片/地头卡背面.jpg",
+      "sha256": "55a03bd9dc065ec27cd574f34a9be7d0fed3a78bd4dbe36a62104ab466585a64"
+    },
+    {
+      "id": "diplomat-sheet",
+      "path": "src/原始图片/12张使节卡，3x4排列.jpg",
+      "sha256": "354b7dcef57ef04c388f13c55895c0a33ccc87096078870e6409505240071a74"
+    },
+    {
+      "id": "diplomat-back",
+      "path": "src/原始图片/使节卡背面.jpg",
+      "sha256": "4c2902937dde5211ba0a45e6c732e8058c31d0a86fe1441a585dbf859b005bfb"
+    },
+    {
+      "id": "top-1",
+      "path": "src/原始图片/大名卡牌/card_1.png",
+      "sha256": "82fbd6d999b344862a4a17ee1532df372224f2c365652e7ca47d81fd4c688e9d"
+    },
+    {
+      "id": "top-2",
+      "path": "src/原始图片/大名卡牌/card_2.png",
+      "sha256": "7e40b551070dd18b47dd1abd5d26c1c68787eb658e061985e7447e19414e56ea"
+    },
+    {
+      "id": "top-3",
+      "path": "src/原始图片/大名卡牌/card_3.png",
+      "sha256": "a05e4b7fc554ade2e31a02e9ea54064c79e96b04627d027a51699d976f84a8bb"
+    },
+    {
+      "id": "top-4",
+      "path": "src/原始图片/大名卡牌/card_4.png",
+      "sha256": "f4691a08e4de65414a9cca33ce1298341dba8256e3c4ced4853dd75098f00b51"
+    },
+    {
+      "id": "top-5",
+      "path": "src/原始图片/大名卡牌/card_5.png",
+      "sha256": "049d6dd04ae621f70297bf68cea913f51dbf45b6f83443f60a3d43278a21354b"
+    },
+    {
+      "id": "top-6",
+      "path": "src/原始图片/大名卡牌/card_6.png",
+      "sha256": "294f66a354419a1edb8d889d2fc3df7a8ee322b08f9ff9b9e38c5564eec5b5aa"
+    },
+    {
+      "id": "top-7",
+      "path": "src/原始图片/大名卡牌/card_7.png",
+      "sha256": "6c438ce86ca7ad762ea2bd4c2ee88a994dc66cd68725e76908cde3aa5371f547"
+    },
+    {
+      "id": "top-8",
+      "path": "src/原始图片/大名卡牌/card_8.png",
+      "sha256": "33b98d4eb450bd2ee9b1141111acb88fc5471f3927d7a039f1647405b421f6eb"
+    },
+    {
+      "id": "top-9",
+      "path": "src/原始图片/大名卡牌/card_9.png",
+      "sha256": "de7435261fd0f208a4fbe5221acb953eb8a710774dc0b48d137d496d49e33e04"
+    },
+    {
+      "id": "training-asset-2153342442631898251",
+      "path": "src/原始图片/训练场/金色奖励/httpssteamusercontentaakamaihdnetugc2153342442631898251ED6DA98A649AC99867B88FE01BF4618203E16BC2.jpg",
+      "sha256": "c17417c2cfa3c472f1efad484a7b6050c8e216b72e590344bd79d4506d58babd"
+    },
+    {
+      "id": "training-asset-2153342442631898309",
+      "path": "src/原始图片/训练场/金色奖励/httpssteamusercontentaakamaihdnetugc215334244263189830958CA5062FA8B63927DA8712DC290674347427727.jpg",
+      "sha256": "696976cdd8edaa19f11004abdb557b4fb1f2dc8c62c868fb8f26ac00ca091347"
+    },
+    {
+      "id": "training-asset-2153342442631898385",
+      "path": "src/原始图片/训练场/金色奖励/httpssteamusercontentaakamaihdnetugc215334244263189838526D3F0D8CBF5856FB7C3526F0EDC749EAF9CCD63.jpg",
+      "sha256": "3155497f41d8c4c13f42958d27f3d66cdf75ae983145ff06bf30374288069a44"
+    },
+    {
+      "id": "training-asset-2153342442631898454",
+      "path": "src/原始图片/训练场/金色奖励/httpssteamusercontentaakamaihdnetugc215334244263189845484706BF8B8615E77797192B75D0F25BA84C1818B.jpg",
+      "sha256": "bf746fe3a8975ef293162a2058f2a5aadd579d9ad595c352ac64e76ec164eff9"
+    },
+    {
+      "id": "training-asset-2153342442631898527",
+      "path": "src/原始图片/训练场/金色奖励/httpssteamusercontentaakamaihdnetugc2153342442631898527FA91ADB16E737CE421579CBBA9735A9748174FC2.jpg",
+      "sha256": "81a01930d4d996182e54b30d0301c242f636ba773c1f224846a6bd9f58955736"
+    },
+    {
+      "id": "training-asset-2153342442631898606",
+      "path": "src/原始图片/训练场/金色奖励/httpssteamusercontentaakamaihdnetugc2153342442631898606D1F9565899AD55E11163EC1E1EC498AA5BEF4505.jpg",
+      "sha256": "77fb5daaf9fcccbe29f39dfe0d1b4deac8fc612ecd1b0f7fa69c33592afaa78c"
+    },
+    {
+      "id": "training-asset-2153342442631898669",
+      "path": "src/原始图片/训练场/金色奖励/httpssteamusercontentaakamaihdnetugc21533424426318986695C29A11A6650F1D29FF692C397C266B6CF53A83B.jpg",
+      "sha256": "ea0d752a303da6575757bc1d1fecc521321dde920130eab5145fbbab60d33928"
+    },
+    {
+      "id": "training-asset-2153342442631898740",
+      "path": "src/原始图片/训练场/金色奖励/httpssteamusercontentaakamaihdnetugc21533424426318987402842C261F30D6B2A663128AC45E25092BB01E973.jpg",
+      "sha256": "9ed4887387f2b1e79c48edad9af3c8b966aae28c8331348a7ddd1a2db747d91d"
+    },
+    {
+      "id": "training-asset-2153342442631898793",
+      "path": "src/原始图片/训练场/金色奖励/httpssteamusercontentaakamaihdnetugc215334244263189879378922BAE3F8EA5579CCF69A570A14F6735E4DD54.jpg",
+      "sha256": "e574857150243c699663675902fa12da96d04fc03be9bc7b6301b482b9e31851"
+    },
+    {
+      "id": "training-asset-2153342442631897629",
+      "path": "src/原始图片/训练场/银色奖励/httpssteamusercontentaakamaihdnetugc2153342442631897629D07AAF29A32A004CDEE91ABB0C614E865B364C49.jpg",
+      "sha256": "0f4d77dd3510f39e52d0151854cf5400d1578d9175c0cb6735ae7951bd688bc6"
+    },
+    {
+      "id": "training-asset-2153342442631897681",
+      "path": "src/原始图片/训练场/银色奖励/httpssteamusercontentaakamaihdnetugc215334244263189768197CB87102D70C311FAB95D6107482C214F3427DC.jpg",
+      "sha256": "b175672529400979959845bbba8b766a8c55d1653316d9a49f2e758bb6234c14"
+    },
+    {
+      "id": "training-asset-2153342442631897741",
+      "path": "src/原始图片/训练场/银色奖励/httpssteamusercontentaakamaihdnetugc2153342442631897741494221E22F6B47554C47A9DAA70CD4AA70A872BC.jpg",
+      "sha256": "abfd9fc015fce82785e92bdf00c9322eda462aa832e3535c7039ae289d6765ae"
+    },
+    {
+      "id": "training-asset-2153342442631897801",
+      "path": "src/原始图片/训练场/银色奖励/httpssteamusercontentaakamaihdnetugc215334244263189780109C3538E3ADFE38583B0B5F0174BE9FA5F1E5864.jpg",
+      "sha256": "01152dc963c0ba63060143e445f6d1b4cc7834c98634da495101b682e47b82da"
+    },
+    {
+      "id": "training-asset-2153342442631897865",
+      "path": "src/原始图片/训练场/银色奖励/httpssteamusercontentaakamaihdnetugc2153342442631897865700642D6ED25AE316EDAED7DBCBE69BD2A13B7FA.jpg",
+      "sha256": "06cbe784e950455705f0a7f2f94288c2a4e3f6f45c9c81e8193e7eac229a0dc3"
+    },
+    {
+      "id": "training-asset-2153342442631897935",
+      "path": "src/原始图片/训练场/银色奖励/httpssteamusercontentaakamaihdnetugc215334244263189793567C08FF3771A73DDC67AB91B7F948E20A328291B.jpg",
+      "sha256": "48b98ac9a76144cd9523dd1893ddf7cece726a8ed8566a5df6e17df3db9bc18d"
+    },
+    {
+      "id": "training-asset-2153342442631898019",
+      "path": "src/原始图片/训练场/银色奖励/httpssteamusercontentaakamaihdnetugc2153342442631898019267E155F8D8BAD8E35AF8B3339FA06E61E894365.jpg",
+      "sha256": "1553c2a5fdb74405ca0492aeaf676188d6906be3860a4ce44f5057e76c57bdc4"
+    },
+    {
+      "id": "training-asset-2153342442631898096",
+      "path": "src/原始图片/训练场/银色奖励/httpssteamusercontentaakamaihdnetugc2153342442631898096BE235476F1919499113CCFF7AF8FFC1287272469.jpg",
+      "sha256": "362b6d56da5fde14d759756957f8782fb97ac69b3c4f78c673852e1d8f42d0bf"
+    },
+    {
+      "id": "training-asset-2153342442631898178",
+      "path": "src/原始图片/训练场/银色奖励/httpssteamusercontentaakamaihdnetugc2153342442631898178AE56B38F7FC0677ABD452FB6DCF39936A4A347F9.jpg",
+      "sha256": "ac7f6ffaaf1630ecdfa83220029663ba5d08bf5583028c67fd7062dda513e9f1"
+    }
+  ],
+  "unclassifiedAssets": [
+    {
+      "id": "unclassified-2153342442631898669",
+      "sourceRef": "image:training-asset-2153342442631898669",
+      "verification": "pending",
+      "enabled": false,
+      "observedEffects": [
+        {
+          "type": "chooseResource",
+          "amount": 2
+        }
+      ],
+      "reasonCode": "EDITION_UNVERIFIED"
+    },
+    {
+      "id": "unclassified-2153342442631897629",
+      "sourceRef": "image:training-asset-2153342442631897629",
+      "verification": "pending",
+      "enabled": false,
+      "observedEffects": [
+        {
+          "type": "oneOfActions",
+          "amount": 1,
+          "options": [
+            "courtier",
+            "warrior",
+            "gardener"
+          ]
+        }
+      ],
+      "reasonCode": "EDITION_UNVERIFIED"
+    }
+  ],
+  "trainingZones": [
+    {
+      "id": "yard-cost-1",
+      "ironCost": 1,
+      "value": 1,
+      "faceTones": [
+        "resource"
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://devir.world/thewhitecastle/assets/tauler.png"
+    },
+    {
+      "id": "yard-cost-3",
+      "ironCost": 3,
+      "value": 1,
+      "faceTones": [
+        "action"
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://devir.world/thewhitecastle/assets/tauler.png"
+    },
+    {
+      "id": "yard-cost-5",
+      "ironCost": 5,
+      "value": 2,
+      "faceTones": [
+        "resource",
+        "action"
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://devir.world/thewhitecastle/assets/tauler.png"
+    }
+  ],
+  "excludedCards": {
+    "steward": [
+      1,
+      7,
+      9,
+      11,
+      12,
+      13
+    ],
+    "diplomat": [
+      6,
+      8,
+      10
+    ]
   }
 }

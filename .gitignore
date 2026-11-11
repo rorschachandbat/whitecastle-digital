@@ -11,5 +11,7 @@ Thumbs.db
 .codegraph/
 .codegraph-full/
 .local/
+__pycache__/
+*.pyc
 # 原始卡图仅供本地核验，版本库保存转录数据和来源指纹。
 src/原始图片/

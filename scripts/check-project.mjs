@@ -16,6 +16,7 @@ const required = [
   'docs/card-castle-audit.md', 'docs/top-decree-audit.md', 'docs/training-pairing.md',
   'docs/starting-card-audit.md',
   'scripts/CHANGELOG.md', 'tests/CHANGELOG.md', 'config-editor.html', 'data/whitecastle-2p.json',
+  'docs/ai-training.md', 'docs/ai-training-results.md', 'src/ai/CHANGELOG.md', 'data/ai-heuristic.json', 'requirements-ai.txt',
 ];
 for (const name of required) {
   if (!fs.existsSync(path.join(root, name))) {
@@ -28,6 +29,8 @@ const sourceFiles = [
   'src/engine/cardRules.js', 'src/engine/startingDraft.js', 'src/data/catalog.js',
   'src/ui/play.js', 'src/engine/localMatch.js', 'src/engine/actionOptions.js',
   'src/engine/influence.js', 'src/game/game.js', 'src/game/localClient.js', 'scripts/serve-play.mjs',
+  'src/ai/environment.js', 'src/ai/features.js', 'src/ai/heuristicPolicy.js',
+  'scripts/ai-common.mjs', 'scripts/ai-env-server.mjs', 'scripts/generate-training-data.mjs',
 ];
 const source = sourceFiles
   .filter((name) => name === 'src/main.js' || name.startsWith('src/ui/'))

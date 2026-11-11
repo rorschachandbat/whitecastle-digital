@@ -1,5 +1,11 @@
 # 工具脚本 CHANGELOG
 
+## 2026-11-11 — AI 训练与评估
+
+- 新增 `ai-common.mjs`、`ai-env-server.mjs`，用本地 JSON 行协议把 Python 训练连接到 JS 规则环境。
+- 新增压缩数据生成、目录/权重哈希绑定、背压、独立评估、检查点与恢复训练。
+- `train-policy.py` 训练策略/价值网络；`evaluate-ai.py` 报告交换座位后的胜率、分数和分差。
+
 ## 2026-11-11 — 本地练习服务
 
 - 新增 `serve-play.mjs` / `npm run play`，绑定127.0.0.1，端口参数默认4176；同时提供页面、配置编辑器和本机boardgame.io会话API。

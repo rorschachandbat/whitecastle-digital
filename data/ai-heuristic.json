@@ -1,0 +1,17 @@
+{
+  "version": "guide-prior-v1",
+  "rounds": [
+    { "food": 1.6, "pearl": 1.4, "iron": 1.0, "coin": 0.7, "seal": 0.85, "gardener": 6.0, "courtier": 5.0, "warrior": 2.5 },
+    { "food": 1.0, "pearl": 1.5, "iron": 1.2, "coin": 0.7, "seal": 0.85, "gardener": 4.0, "courtier": 5.0, "warrior": 4.0 },
+    { "food": 0.4, "pearl": 1.0, "iron": 1.4, "coin": 0.5, "seal": 0.6, "gardener": 3.0, "courtier": 4.0, "warrior": 6.0 }
+  ],
+  "effect": { "points": 1.0, "influence": 0.8, "lantern": 3.0, "chooseResource": 1.5, "domain": 5.0, "castleAny": 5.0, "castleLight": 3.0, "castleCoral": 4.0, "castleBlack": 4.0, "castleWhite": 4.0, "well": 2.0 },
+  "points": 1.0,
+  "skipPenalty": 3.0,
+  "payGate": 2.0,
+  "exchangePenalty": 2.0,
+  "chain": 2.0,
+  "startLantern": 2.0,
+  "well": 1.0,
+  "clearBridge": 2.0
+}

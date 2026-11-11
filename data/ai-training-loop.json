@@ -1,9 +1,9 @@
 {
-  "input": ".local/ai/guide-v4.jsonl.gz",
+  "input": ".local/ai/guide-r4.jsonl.gz",
   "initialCheckpoint": null,
   "catalog": null,
   "weights": null,
-  "prefix": "ai-loop-v2",
+  "prefix": "ai-loop-r4",
   "epochs": 12,
   "gamesPerGeneration": 32,
   "evaluationPairs": 16,

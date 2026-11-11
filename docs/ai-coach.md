@@ -25,7 +25,7 @@
 
 ```powershell
 # 新版编码的数据必须重新生成；命令拒绝覆盖已有输出。
-node scripts/generate-training-data.mjs --games 32 --out .local/ai/guide-v4.jsonl.gz --prefix ai-guide-v4
+node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r4.jsonl.gz --prefix ai-guide-r4
 
 # 默认持续运行；不需要联网，也不需要打开网页。
 .\scripts\train-ai.ps1
@@ -45,7 +45,7 @@ node scripts/generate-training-data.mjs --games 32 --out .local/ai/guide-v4.json
 
 `-Generations 0` 是持续模式；计算机休眠、关机时没有计算，重新执行命令才恢复。没有安装开机任务、系统服务或云计算作业。前台可用 Ctrl+C 请求停止；强制结束最多丢失正在执行但尚未写检查点的一局。预热中断会从头预热；选模评估中断会重做该份未完成报告。
 
-同一输出目录由系统文件锁保护，防止两个进程同时写模型。输出默认 `.local/ai/continuous-v2-final/`：
+同一输出目录由系统文件锁保护，防止两个进程同时写模型。输出默认 `.local/ai/continuous-r4/`：
 
 | 文件 | 用途 |
 |---|---|
@@ -62,7 +62,7 @@ node scripts/generate-training-data.mjs --games 32 --out .local/ai/guide-v4.json
 
 `input`、`catalog`、`weights`、`initialCheckpoint` 的相对路径以仓库为基准，配置本身和 `-OutputDirectory` 由调用方指定。换分支需一起复制 `scripts/`、`src/ai/`、`src/engine/`、`src/data/`、`data/` 及依赖，另安装Python环境；无需固定盘符、分支名、远端URL或 `dist/`。
 
-卡牌、编码、启发式版本或输入清单改变时，原目录拒绝继续。`encoderHash` 绑定特征和环境源码，避免漏改版本名后误载旧权重。旧数据和模型仍保留；本批 `public-decisions-v2` 与上一批v1权重不兼容，不能静默续训。
+卡牌、编码、启发式版本或输入清单改变时，原目录拒绝继续。`encoderHash` 绑定特征和环境源码，避免漏改版本名后误载旧权重。2026-11-11用户授权删除旧实验，但自动审批阻止删除，实际将旧目录整体移到 `.local/obsolete-ai-pre-r4/`；修订4使用 `guide-r4` 数据和 `continuous-r4` 输出，从随机初始权重重新训练。旧文档中的v1/v2实验路径仅供历史追踪。
 
 ## 数据为什么会更有用
 
@@ -93,7 +93,7 @@ node scripts/generate-training-data.mjs --games 32 --out .local/ai/guide-v4.json
 已经有命令行入口读取**本项目网页导出的存档**，重放到当前局面，输出前几个策略候选及各自的条件续行：
 
 ```powershell
-.\.local\ai-venv\Scripts\python.exe scripts/analyze-position.py .local/my-save.json --model .local/ai/continuous-v2-final/initial/imitation.pt --top 5 --out .local/ai/my-analysis.json
+.\.local\ai-venv\Scripts\python.exe scripts/analyze-position.py .local/my-save.json --model .local/ai/continuous-r4/initial/imitation.pt --top 5 --out .local/ai/my-analysis.json
 ```
 
 实际使用时从 `loop-state.json` 读取 `champion` 的路径，替换示例模型。输出 `policyWeight` 是合法候选间的策略权重，`rawValue` 是未经校准的价值头数值；两者都**不是动作胜率**。排序对应当前原子动作，完整续行由该候选条件下的网络贪心选择产生，尚未遍历所有连锁组合，也没有网页高亮。
@@ -127,5 +127,21 @@ flowchart LR
 3. 没有结构化资料时，才用截图识别卡牌/token、数字与坐标。识别应带置信度和人工纠错，缺牌、看不清骰点时不能直接给胜率。
 4. 数据进入统一的公开局面格式，保存来源、时间、规则/目录哈希和缺失字段。只比较当前训练规则能描述的盘面；有差异时明确拒绝或要求适配，不能悄悄补默认值。
 5. 完成动作守恒、资源上限、人员总数、轮次等校验后才分析。局中有尚未完成的连锁选择时，还要还原行动上下文；只看棋盘截图未必足够。
+
+### BGA 排名局历程研究状态（2026-11-11）
+
+用户提供的历史筛选页能显示指定玩家的姬路城比赛记录及单局桌号。未过滤前页面显示2117条综合记录，姬路城964局；选择姬路城（`game_id=2242`）并勾选完成条件（`finished=1`）后显示896条、707胜。该筛选仍包含认输局，不能把896条都视为完整终局样本。游戏面板可见十名当前赛季排名玩家，此排名不能自动等同于ELO总榜。
+
+样例完成局的详情页有“观看游戏重播”入口，随后能选择玩家视角，公开日志包含撤销和重新开始。页面未显示JSON导出入口；这不证明平台不存在其他授权导出方式。该样例是两人基础版、扩展均停用，但起始资源池另有“限制”选项，不能仅凭游戏名称就混入当前本地规则训练。
+
+截至研究时[BGA使用条款](https://boardgamearena.com/legal?section=tosv)VII.A限制机器人、蜘蛛及多查询等自动方式获取用户和内容，XIII.D限制大量提取或再使用数据库；VIII列有公平游戏要求。批量数据源及在线实时建议工具都需要先向平台确认许可范围。本次只验证页面入口，没有启动全量爬虫，也没有开发实时建议工具。当前训练继续使用本地规则生成的128局攻略教师数据和本地自我对弈。
+
+若获得允许使用的数据，处理流程仍须逐步完成：
+
+1. 保留桌号、采集时间、规则/资产版本、人数、扩展和起始池配置；按桌号去重，同局两视角不能分到训练和验证两侧。
+2. 对撤销及重开归并，只保留最终采纳动作；确认稳定决策边界，未来补牌、骰子及整局日志不进入当时公开特征。
+3. 用本地引擎生成该时刻合法候选，将实际动作对齐到候选，并逐步核对资源、人员、牌面、回合及终局。未知动作或规则差异的整局先隔离。
+4. 合格样本再写入 `state/candidates/teacher/actor/game/step/z`，同时保留专家数据来源与质量标记。高手实际选择是模仿标签，不等同最优答案；必须保留失败局。
+5. 单独保留高手整局验证/测试，比较混合专家数据前后的独立表现。目前上述整局转换和专家训练均未实现，已有观察档案不能直接输入训练器。
 
 复盘、单人练习和对手知情同意的训练可作为第一目标。实时对局提示是否能用，应以相应平台和房间规则为准；本项目不自动落子，也不绕过平台控制。暂时无需账号密码或Cookie。

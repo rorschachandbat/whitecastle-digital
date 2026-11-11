@@ -1,5 +1,13 @@
 # 工具脚本 CHANGELOG
 
+## 2026-11-11 — 配置静态服务与目录检查
+
+- 新增 `serve-config.mjs` / `npm run config`：只公开编辑器白名单资源，绑定回环地址，可通过参数指定 1024–65535 端口；不运行 Vite 或构建。
+- 路径以脚本所在位置推导；复制到其他分支时需保留同布局的 `config-editor.html`、`src/ui/`、`src/data/` 和 `data/whitecastle-2p.json`。
+- 项目检查扩展为覆盖配置目录、编辑器、规则核心及其相邻 CHANGELOG。
+- 已验证 Node 语法、仓库根运行及从仓库外运行检查脚本；本地静态服务已用于编辑器单牌修改验证。
+- 推荐其他分支复核上述文件布局与端口占用；无分支名、仓库 URL 或构建输出目录依赖。
+
 ## 2026-11-11 — 非构建检查入口
 
 - `check-project.mjs` 检查规则/开发文档、模块 CHANGELOG、页面本地导入、StringTable 引用与 Markdown 本地文件链接。

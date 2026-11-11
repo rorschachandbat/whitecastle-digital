@@ -34,6 +34,9 @@ status.append(
   element('p', 'status.notice'),
 );
 app.append(status);
+const editorLink = element('a', 'editor.open', 'editor-link');
+editorLink.href = './config-editor.html';
+app.append(editorLink);
 
 const grid = element('div', null, 'grid');
 const framework = element('section', null, 'panel');
@@ -84,7 +87,7 @@ app.append(grid);
 const roadmap = element('section', null, 'panel roadmap');
 roadmap.append(element('h2', 'roadmap.title'));
 const steps = element('ol');
-for (const key of ['roadmap.rules', 'roadmap.engine', 'roadmap.web', 'roadmap.ai']) {
+for (const key of ['roadmap.engine', 'roadmap.actions', 'roadmap.web', 'roadmap.replay', 'roadmap.ai']) {
   steps.append(element('li', key));
 }
 roadmap.append(steps, element('p', 'roadmap.note', 'muted'));

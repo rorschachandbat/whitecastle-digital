@@ -11,6 +11,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
+    "config": "node scripts/serve-config.mjs",
     "test": "node --test",
     "check": "node scripts/check-project.mjs"
   },

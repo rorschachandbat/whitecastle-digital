@@ -1,0 +1,644 @@
+{
+  "schemaVersion": 1,
+  "revision": 1,
+  "playerCount": 2,
+  "status": "partial",
+  "limits": {
+    "resource": 7,
+    "seal": 5
+  },
+  "policy": {
+    "singleDieEndpoint": null
+  },
+  "personalDomainRows": [
+    {
+      "id": "courtier",
+      "dieColor": "coral",
+      "figureType": "courtier",
+      "compareValue": 6,
+      "baseGain": {
+        "type": "food",
+        "amount": 1
+      },
+      "revealedGains": [
+        {
+          "type": "food",
+          "amount": 1
+        },
+        {
+          "type": "food",
+          "amount": 1
+        },
+        {
+          "type": "coin",
+          "amount": 2
+        },
+        {
+          "type": "food",
+          "amount": 1
+        },
+        {
+          "type": "seal",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/playerboard0.png"
+    },
+    {
+      "id": "gardener",
+      "dieColor": "black",
+      "figureType": "gardener",
+      "compareValue": 6,
+      "baseGain": {
+        "type": "iron",
+        "amount": 1
+      },
+      "revealedGains": [
+        {
+          "type": "iron",
+          "amount": 1
+        },
+        {
+          "type": "iron",
+          "amount": 1
+        },
+        {
+          "type": "lantern",
+          "amount": 1
+        },
+        {
+          "type": "iron",
+          "amount": 1
+        },
+        {
+          "type": "coin",
+          "amount": 2
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/playerboard0.png"
+    },
+    {
+      "id": "warrior",
+      "dieColor": "white",
+      "figureType": "warrior",
+      "compareValue": 6,
+      "baseGain": {
+        "type": "pearl",
+        "amount": 1
+      },
+      "revealedGains": [
+        {
+          "type": "pearl",
+          "amount": 1
+        },
+        {
+          "type": "pearl",
+          "amount": 1
+        },
+        {
+          "type": "seal",
+          "amount": 1
+        },
+        {
+          "type": "pearl",
+          "amount": 1
+        },
+        {
+          "type": "lantern",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/playerboard0.png"
+    }
+  ],
+  "cards": [
+    {
+      "id": "garden-26",
+      "kind": "plant",
+      "verification": "confirmed",
+      "foodCost": 5,
+      "victoryPoints": 9,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [
+            {
+              "type": "coin",
+              "amount": 4
+            }
+          ],
+          "effects": [
+            {
+              "type": "castleAny",
+              "amount": 1
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_26.png"
+    },
+    {
+      "id": "garden-27",
+      "kind": "plant",
+      "verification": "confirmed",
+      "foodCost": 4,
+      "victoryPoints": 7,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [
+            {
+              "type": "coin",
+              "amount": 3
+            }
+          ],
+          "effects": [
+            {
+              "type": "gardener",
+              "amount": 1
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_27.png"
+    },
+    {
+      "id": "garden-28",
+      "kind": "plant",
+      "verification": "confirmed",
+      "foodCost": 4,
+      "victoryPoints": 7,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [
+            {
+              "type": "coin",
+              "amount": 3
+            }
+          ],
+          "effects": [
+            {
+              "type": "courtier",
+              "amount": 1
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_28.png"
+    },
+    {
+      "id": "garden-29",
+      "kind": "plant",
+      "verification": "confirmed",
+      "foodCost": 4,
+      "victoryPoints": 7,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [
+            {
+              "type": "coin",
+              "amount": 3
+            }
+          ],
+          "effects": [
+            {
+              "type": "warrior",
+              "amount": 1
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_29.png"
+    },
+    {
+      "id": "garden-30",
+      "kind": "plant",
+      "verification": "confirmed",
+      "foodCost": 3,
+      "victoryPoints": 5,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [
+            {
+              "type": "coin",
+              "amount": 4
+            }
+          ],
+          "effects": [
+            {
+              "type": "domain",
+              "amount": 1
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_30.png"
+    },
+    {
+      "id": "garden-58",
+      "kind": "stone",
+      "verification": "confirmed",
+      "foodCost": 1,
+      "victoryPoints": 1,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "chooseResource",
+              "amount": 2
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_58.png"
+    },
+    {
+      "id": "garden-59",
+      "kind": "stone",
+      "verification": "confirmed",
+      "foodCost": 1,
+      "victoryPoints": 1,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "coin",
+              "amount": 3
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_59.png"
+    },
+    {
+      "id": "garden-60",
+      "kind": "stone",
+      "verification": "confirmed",
+      "foodCost": 2,
+      "victoryPoints": 3,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "seal",
+              "amount": 2
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_60.png"
+    },
+    {
+      "id": "garden-61",
+      "kind": "stone",
+      "verification": "confirmed",
+      "foodCost": 2,
+      "victoryPoints": 3,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "castleLight",
+              "amount": 1
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_61.png"
+    },
+    {
+      "id": "garden-62",
+      "kind": "stone",
+      "verification": "confirmed",
+      "foodCost": 3,
+      "victoryPoints": 5,
+      "fields": [
+        {
+          "id": "front",
+          "tone": "none",
+          "cost": [],
+          "effects": [
+            {
+              "type": "well",
+              "amount": 1
+            }
+          ]
+        }
+      ],
+      "back": [],
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/card_62.png"
+    }
+  ],
+  "yardFaces": [
+    {
+      "id": "yard-face-1",
+      "tone": "action",
+      "cost": [],
+      "effects": [
+        {
+          "type": "warrior",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard1.png"
+    },
+    {
+      "id": "yard-face-2",
+      "tone": "action",
+      "cost": [],
+      "effects": [
+        {
+          "type": "gardener",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard2.png"
+    },
+    {
+      "id": "yard-face-3",
+      "tone": "action",
+      "cost": [],
+      "effects": [
+        {
+          "type": "castleCoral",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard3.png"
+    },
+    {
+      "id": "yard-face-4",
+      "tone": "action",
+      "cost": [],
+      "effects": [
+        {
+          "type": "castleWhite",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard4.png"
+    },
+    {
+      "id": "yard-face-5",
+      "tone": "action",
+      "cost": [],
+      "effects": [
+        {
+          "type": "castleBlack",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard5.png"
+    },
+    {
+      "id": "yard-face-6",
+      "tone": "action",
+      "cost": [],
+      "effects": [
+        {
+          "type": "castleAny",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard6.png"
+    },
+    {
+      "id": "yard-face-7",
+      "tone": "action",
+      "cost": [],
+      "effects": [
+        {
+          "type": "domain",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard7.png"
+    },
+    {
+      "id": "yard-face-8",
+      "tone": "action",
+      "cost": [],
+      "effects": [
+        {
+          "type": "courtier",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard8.png"
+    },
+    {
+      "id": "yard-face-9",
+      "tone": "resource",
+      "cost": [],
+      "effects": [
+        {
+          "type": "influence",
+          "amount": 2
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard9.png"
+    },
+    {
+      "id": "yard-face-10",
+      "tone": "resource",
+      "cost": [],
+      "effects": [
+        {
+          "type": "food",
+          "amount": 3
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard10.png"
+    },
+    {
+      "id": "yard-face-11",
+      "tone": "resource",
+      "cost": [],
+      "effects": [
+        {
+          "type": "well",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard11.png"
+    },
+    {
+      "id": "yard-face-12",
+      "tone": "resource",
+      "cost": [],
+      "effects": [
+        {
+          "type": "seal",
+          "amount": 2
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard12.png"
+    },
+    {
+      "id": "yard-face-13",
+      "tone": "resource",
+      "cost": [],
+      "effects": [
+        {
+          "type": "coin",
+          "amount": 5
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard13.png"
+    },
+    {
+      "id": "yard-face-14",
+      "tone": "resource",
+      "cost": [],
+      "effects": [
+        {
+          "type": "castleLight",
+          "amount": 1
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard14.png"
+    },
+    {
+      "id": "yard-face-15",
+      "tone": "resource",
+      "cost": [],
+      "effects": [
+        {
+          "type": "points",
+          "amount": 2
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard15.png"
+    },
+    {
+      "id": "yard-face-16",
+      "tone": "resource",
+      "cost": [],
+      "effects": [
+        {
+          "type": "pearl",
+          "amount": 3
+        }
+      ],
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/game-plugins/whitecastle/1.3.6/images/yard16.png"
+    }
+  ],
+  "tokens": [
+    {
+      "id": "yard-token-1",
+      "verification": "pending",
+      "faceIds": [],
+      "sourceRef": ""
+    },
+    {
+      "id": "yard-token-2",
+      "verification": "pending",
+      "faceIds": [],
+      "sourceRef": ""
+    },
+    {
+      "id": "yard-token-3",
+      "verification": "pending",
+      "faceIds": [],
+      "sourceRef": ""
+    },
+    {
+      "id": "yard-token-4",
+      "verification": "pending",
+      "faceIds": [],
+      "sourceRef": ""
+    },
+    {
+      "id": "yard-token-5",
+      "verification": "pending",
+      "faceIds": [],
+      "sourceRef": ""
+    },
+    {
+      "id": "yard-token-6",
+      "verification": "pending",
+      "faceIds": [],
+      "sourceRef": ""
+    },
+    {
+      "id": "yard-token-7",
+      "verification": "pending",
+      "faceIds": [],
+      "sourceRef": ""
+    },
+    {
+      "id": "yard-token-8",
+      "verification": "pending",
+      "faceIds": [],
+      "sourceRef": ""
+    }
+  ],
+  "sources": [
+    {
+      "id": "rules",
+      "url": "https://www.yucata.de/en/Rules/WhiteCastle"
+    },
+    {
+      "id": "publisher",
+      "url": "https://devir.world/thewhitecastle/components_ENG.html"
+    }
+  ],
+  "coverage": {
+    "plant": 5,
+    "stone": 5,
+    "startingResource": null,
+    "startingAction": null,
+    "steward": null,
+    "diplomat": null,
+    "top": null,
+    "decree": null
+  }
+}

@@ -24,7 +24,7 @@ const list = el('div', null, 'component-list');
 const detail = el('section', null, 'panel component-detail');
 const filter = document.createElement('select');
 filter.setAttribute('aria-label', text('editor.filter'));
-for (const kind of ['all', 'startingAction', 'startingResource', 'decree', 'steward', 'diplomat', 'top', 'plant', 'stone', 'row', 'face', 'token', 'zone']) {
+for (const kind of ['all', 'startingAction', 'startingResource', 'decree', 'steward', 'diplomat', 'top', 'plant', 'stone', 'row', 'face', 'pool', 'zone']) {
   const option = el('option', kind === 'all' ? 'editor.all' : `editor.kind.${kind}`);
   option.value = kind;
   filter.append(option);
@@ -71,7 +71,7 @@ function allEntries() {
     ...data.personalDomainRows.map((item, i) => ({ item, kind: 'row', path: ['personalDomainRows', i] })),
     ...data.cards.map((item, i) => ({ item, kind: item.kind, path: ['cards', i] })),
     ...data.yardFaces.map((item, i) => ({ item, kind: 'face', path: ['yardFaces', i] })),
-    ...data.tokens.map((item, i) => ({ item, kind: 'token', path: ['tokens', i] })),
+    ...(data.trainingPools ?? []).map((item, i) => ({ item, kind: 'pool', path: ['trainingPools', i] })),
     ...(data.trainingZones ?? []).map((item, i) => ({ item, kind: 'zone', path: ['trainingZones', i] })),
   ];
 }
@@ -185,7 +185,7 @@ function preview(item, kind) {
       node.textContent = `${text('editor.spot', { n: i + 1 })}：${effectSummary([gain])}`;
       card.append(node);
     });
-  } else if (kind === 'token') {
+  } else if (kind === 'pool') {
     line('editor.faceIds', item.faceIds.join(' / ') || text('editor.pending'));
   } else if (kind === 'zone') {
     line('editor.ironCost', item.ironCost);
@@ -244,27 +244,19 @@ function renderDetail() {
   } else if (current.kind === 'zone') {
     number(detail, 'editor.ironCost', draft.ironCost, (value) => { draft.ironCost = value; });
     number(detail, 'editor.warriorValue', draft.value, (value) => { draft.value = value; });
-  } else if (current.kind === 'token') {
+  } else if (current.kind === 'pool') {
     detail.append(el('p', 'editor.pairNotice'));
-    const chosen = [draft.faceIds[0] ?? '', draft.faceIds[1] ?? ''];
-    for (let i = 0; i < 2; i += 1) {
-      const select = document.createElement('select');
-      const none = el('option', 'editor.pending');
-      none.value = '';
-      select.append(none);
-      for (const face of data.yardFaces) {
-        const option = el('option');
-        option.value = face.id;
-        option.textContent = `${face.id} · ${effectSummary(face.effects)}`;
-        select.append(option);
-      }
-      select.value = chosen[i];
-      select.addEventListener('change', () => {
-        chosen[i] = select.value;
-        draft.faceIds = chosen.filter(Boolean);
+    for (const face of data.yardFaces.filter((item) => item.tone === draft.tone)) {
+      const label = el('label', null, 'editor-field');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = draft.faceIds.includes(face.id);
+      checkbox.addEventListener('change', () => {
+        draft.faceIds = checkbox.checked ? [...draft.faceIds, face.id] : draft.faceIds.filter((id) => id !== face.id);
         dirty = true;
       });
-      field(detail, 'editor.faceIds', select);
+      label.append(checkbox, document.createTextNode(`${face.id} · ${effectSummary(face.effects)}`));
+      detail.append(label);
     }
   } else {
     if (current.kind === 'startingResource') {

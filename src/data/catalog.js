@@ -53,7 +53,7 @@ export function validateCatalog(data) {
     });
   }
   check(data.limits?.resource === 7 && data.limits?.seal === 5, 'limits', 'rulesLimits');
-  check([null, 'left', 'right'].includes(data.policy?.singleDieEndpoint), 'policy.singleDieEndpoint', 'endpoint');
+  check([null, 'left', 'right', 'physical'].includes(data.policy?.singleDieEndpoint), 'policy.singleDieEndpoint', 'endpoint');
   const ids = new Set();
   const unique = (item, path) => {
     check(id(item?.id), `${path}.id`, 'id');
@@ -160,6 +160,28 @@ export function validateCatalog(data) {
       check(tones.includes('action') && tones.includes('resource'), `${path}.faceIds`, 'faceSides');
     }
   });
+  if (data.trainingPools !== undefined) {
+    const pools = array(data.trainingPools, 'trainingPools', 2);
+    check(pools.length === 2, 'trainingPools', 'twoPools');
+    check((data.tokens ?? []).length === 0, 'tokens', 'independentPools');
+    const pooled = new Set();
+    pools.forEach((pool, i) => {
+      const pp = `trainingPools[${i}]`;
+      if (!pool || typeof pool !== 'object') return check(false, pp, 'object');
+      unique(pool, pp);
+      source(pool, pp);
+      check((pool.id === 'gold' && pool.tone === 'resource')
+        || (pool.id === 'silver' && pool.tone === 'action'), pp, 'poolTone');
+      const members = array(pool.faceIds, `${pp}.faceIds`, 32);
+      check(members.length >= 2, `${pp}.faceIds`, 'poolSize');
+      for (const member of members) {
+        check(faceIds.has(member) && !pooled.has(member) && faceTones.get(member) === pool.tone,
+          `${pp}.faceIds`, 'poolReference');
+        pooled.add(member);
+      }
+    });
+    check(pooled.size === faceIds.size, 'trainingPools', 'poolCoverage');
+  }
   if (data.trainingZones !== undefined) {
     const zones = array(data.trainingZones, 'trainingZones', 3);
     check(zones.length === 3, 'trainingZones', 'threeZones');

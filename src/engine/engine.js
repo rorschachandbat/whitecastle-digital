@@ -6,7 +6,8 @@
  */
 
 import { canonicalCatalog } from '../data/catalog.js';
-import { personalField, castleFields } from './cardRules.js';
+import { personalField, castleFields, lightFields } from './cardRules.js';
+import { applyInfluence } from './influence.js';
 
 export const ENGINE_SCHEMA_VERSION = 1;
 
@@ -77,6 +78,11 @@ function configDefaults(input = {}) {
       fail(ERROR_CODES.INVALID_STATE, `基础版固定参数不可修改：${key}`);
     }
   }
+  if (input.policy?.singleDieEndpoint !== undefined
+    && input.policy.singleDieEndpoint !== null
+    && !['physical', 'left', 'right'].includes(input.policy.singleDieEndpoint)) {
+    fail(ERROR_CODES.INVALID_STATE, '孤骰端点策略无效');
+  }
   return {
     ...DEFAULTS,
     ...deepClone(input),
@@ -108,6 +114,7 @@ function normalizePlayer(id, source = {}) {
     lanternCards: deepClone(source.lanternCards ?? source.lanternCardIds ?? []),
     placements: deepClone(source.placements ?? []),
     timePosition: source.timePosition ?? 0,
+    timePriority: source.timePriority ?? 0,
     finalOrder: source.finalOrder ?? null,
   };
 }
@@ -195,8 +202,8 @@ function buildPlacements(config, playerIds) {
     placements[id] = {
       id,
       area: value.area ?? id.split(':')[0],
-      owner: value.owner,
-      row: value.row,
+      ...(value.owner === undefined ? {} : { owner: value.owner }),
+      ...(value.row === undefined ? {} : { row: value.row }),
       comparisonValue: value.comparisonValue ?? value.compareValue ?? null,
       capacity: value.area === 'well' ? null : 1,
       dice: deepClone(value.dice ?? []),
@@ -281,11 +288,17 @@ function normalizeEffects(effects) {
 }
 
 function applyEffects(player, effects, config, choices = { values: [], used: 0 }, depth = 0, context) {
-  if (depth > 8) fail(ERROR_CODES.INVALID_EFFECT, '灯笼效果递归过深');
-  let next = deepClone(player);
+  if (depth > 64) fail(ERROR_CODES.INVALID_EFFECT, '灯笼效果递归过深');
+  let next = processExchanges(player, config, context);
   let ordered = normalizeEffects(effects);
   if (ordered.length > 1 && context) {
-    const order = context.effectOrders[context.orderIndex++];
+    const index = context.orderIndex++;
+    const order = context.effectOrders[index];
+    if (context.interactive && order === undefined) {
+      fail(ERROR_CODES.CHOICE_REQUIRED, '请选择同组效果顺序', {
+        type: 'effectOrder', index, effects: ordered, player: next, state: context.state,
+      });
+    }
     if (order !== undefined && order !== null) {
       if (!Array.isArray(order) || order.length !== ordered.length || new Set(order).size !== order.length
         || order.some((index) => !Number.isInteger(index) || index < 0 || index >= ordered.length)) {
@@ -295,6 +308,7 @@ function applyEffects(player, effects, config, choices = { values: [], used: 0 }
     }
   }
   for (const effect of ordered) {
+    next = processExchanges(next, config, context);
     if (!Number.isSafeInteger(effect.amount) || effect.amount < 1) {
       fail(ERROR_CODES.INVALID_EFFECT, '收益数量必须是正整数');
     }
@@ -308,6 +322,10 @@ function applyEffects(player, effects, config, choices = { values: [], used: 0 }
       next = applyEffects(next, wellEffects(config), config, choices, depth + 1, context);
       continue;
     }
+    if (effect.type === 'influence') {
+      next = applyInfluence(next, effect.amount, config, context);
+      continue;
+    }
     if (['gardener', 'warrior', 'courtier', 'domain', 'castleAny', 'castleLight', 'castleCoral', 'castleBlack', 'castleWhite'].includes(effect.type)) {
       if (!context || effect.amount !== 1) fail(ERROR_CODES.INVALID_EFFECT, '行动需要完整决策上下文');
       next = resolveCardAction(next, effect.type, config, choices, depth + 1, context);
@@ -316,7 +334,11 @@ function applyEffects(player, effects, config, choices = { values: [], used: 0 }
     if (effect.type === 'chooseResource') {
       for (let index = 0; index < effect.amount; index += 1) {
         const chosen = choices.values[choices.used++];
-        if (!RESOURCE_NAMES.includes(chosen)) fail(ERROR_CODES.CHOICE_REQUIRED, '必须明确选择食物、铁或珍珠母');
+        if (!RESOURCE_NAMES.includes(chosen)) {
+          fail(ERROR_CODES.CHOICE_REQUIRED, '必须明确选择食物、铁或珍珠母', {
+            type: 'chooseResource', index: choices.used - 1, player: next, state: context?.state,
+          });
+        }
         next.resources[chosen] = Math.min(config.resourceLimit, next.resources[chosen] + 1);
       }
       continue;
@@ -387,6 +409,20 @@ function payCosts(player, costs) {
   return next;
 }
 
+function processExchanges(player, config, context) {
+  let next = deepClone(player);
+  while (context?.decisions[context.decisionIndex]?.type === 'exchangeSeal') {
+    const decision = context.decisions[context.decisionIndex++];
+    if (![1, 2].includes(decision.amount)) fail(ERROR_CODES.INVALID_AMOUNT, '只能兑换1或2枚印章');
+    if (decision.amount === 2 && !RESOURCE_NAMES.includes(decision.resource)) fail(ERROR_CODES.INVALID_RESOURCE, '印章兑换资源无效');
+    next = payCosts(next, [{ type: 'seal', amount: decision.amount }]);
+    if (decision.amount === 1) next.resources.coin += 1;
+    else next.resources[decision.resource] = Math.min(config.resourceLimit, next.resources[decision.resource] + 1);
+    context.state.players[context.actor] = next;
+  }
+  return next;
+}
+
 function personalEffects(player, placement, bridge, config) {
   const row = confirmed(config.personalDomainRows?.find((item) => item.id === placement.row), '个人面板排');
   if (row.dieColor !== bridge.color) fail(ERROR_CODES.TARGET_NOT_ALLOWED, '骰色与个人面板排不符');
@@ -412,29 +448,176 @@ function personalEffects(player, placement, bridge, config) {
   };
 }
 
-function nextDecision(context, type) {
-  const decision = context.decisions[context.decisionIndex++];
-  if (!decision) fail(ERROR_CODES.CHOICE_REQUIRED, '必须明确指定行动目标', { type });
-  if (decision.type !== type) fail(ERROR_CODES.INVALID_ACTION, '决策类型与待执行行动不符', { type });
+function nextDecision(context, type, player = undefined, details = {}) {
+  const index = context.decisionIndex++;
+  const decision = context.decisions[index];
+  if (!decision) {
+    fail(ERROR_CODES.CHOICE_REQUIRED, '必须明确指定行动目标', {
+      type, index, player, state: context.state, ...details,
+    });
+  }
+  if (decision.type !== type) fail(ERROR_CODES.INVALID_ACTION, '决策类型与待执行行动不符', { type, index });
   return decision;
 }
 
 function executeField(player, field, config, choices, depth, context) {
+  player = processExchanges(player, config, context);
   // 字段奖励可整体放弃；已支付的骰差额、部署费用和先前收益不撤销。
   if (context?.decisions[context.decisionIndex]?.type === 'field') {
-    const decision = nextDecision(context, 'field');
+    const decision = nextDecision(context, 'field', player, {
+      field, options: [
+        { type: 'field', fieldId: field.id, skip: false },
+        { type: 'field', fieldId: field.id, skip: true },
+      ],
+    });
     if (decision.fieldId !== field.id || decision.skip !== true) {
-      fail(ERROR_CODES.INVALID_ACTION, '字段放弃必须指明当前字段');
+      if (decision.fieldId !== field.id || decision.skip !== false) {
+        fail(ERROR_CODES.INVALID_ACTION, '字段选择必须指明当前字段并决定是否执行');
+      }
+    } else {
+      return player;
     }
-    return player;
+  } else if (context?.interactive) {
+    fail(ERROR_CODES.CHOICE_REQUIRED, '请选择是否执行当前字段', {
+      type: 'field', index: context.decisionIndex, field, player, state: context.state,
+      options: [
+        { type: 'field', fieldId: field.id, skip: false },
+        { type: 'field', fieldId: field.id, skip: true },
+      ],
+    });
   }
   const paid = payCosts(player, field.cost);
   return applyEffects(paid, field.effects, config, choices, depth + 1, context);
 }
 
+function roomFloor(room, config) {
+  const kind = config.cards?.find((card) => card.id === room.cardId)?.kind;
+  const floor = room.floor ?? (kind === 'steward' ? 1 : kind === 'diplomat' ? 2 : null);
+  if (![1, 2].includes(floor) || (room.cardId && kind !== (floor === 1 ? 'steward' : 'diplomat'))) {
+    fail(ERROR_CODES.DATA_UNVERIFIED, '房间楼层与行动牌不符');
+  }
+  return floor;
+}
+
+function topCard(state, config) {
+  const card = cardByReference(state.topCardId, config);
+  if (card.kind !== 'top' || card.selection !== 'oneEmptySlot' || card.fields?.length !== 3
+    || card.fields.some((field) => field.capacity !== 1)) {
+    fail(ERROR_CODES.DATA_UNVERIFIED, '本局大名卡槽位配置无效');
+  }
+  return card;
+}
+
+function promotionsFor(player, state, config) {
+  const options = [];
+  const locations = ['gate', 'floor1', 'floor2', 'floor3'];
+  for (const [figureIndex, figure] of player.figures.courtier.entries()) {
+    const from = locations.indexOf(locationOf(figure));
+    if (from < 0) continue;
+    for (const steps of [1, 2]) {
+      if (player.resources.pearl < (steps === 1 ? 2 : 5)) continue;
+      const floor = from + steps;
+      if (floor > 3) continue;
+      if (floor === 3) {
+        const card = config.cards?.find((item) => item.id === state.topCardId && item.kind === 'top');
+        if (!card) continue;
+        const slots = card.fields.filter((field) => !state.topSlots?.[field.id]);
+        for (const slot of slots.length ? slots : [null]) {
+          options.push({ figureIndex, steps, ...(slot ? { slotId: slot.id } : {}) });
+        }
+        continue;
+      }
+      for (const room of state.castleRooms) {
+        if (!room.cardId || roomFloor(room, config) !== floor) continue;
+        const card = cardByReference(room.cardId, config);
+        for (const field of lightFields(card)) options.push({ figureIndex, steps, roomId: room.id, fieldId: field.id });
+      }
+    }
+  }
+  return options;
+}
+
+function courtierOptions(player, state, config) {
+  const options = [{ type: 'courtier', skip: true }];
+  const canAudience = player.figures.courtier.length < 5 && player.resources.coin >= 2;
+  if (canAudience) options.push({ type: 'courtier', audience: true });
+  for (const promote of promotionsFor(player, state, config)) {
+    options.push({ type: 'courtier', promote });
+    // 晋升奖励可能先取得金币，因此先晋升后谒见不依赖晋升前的金币数量。
+    if (player.figures.courtier.length < 5) {
+      options.push({ type: 'courtier', audience: true, promote, order: ['promote', 'audience'] });
+    }
+    if (canAudience) options.push({ type: 'courtier', audience: true, promote });
+  }
+  if (canAudience) {
+    const withAudience = deepClone(player);
+    const figureIndex = withAudience.figures.courtier.length;
+    withAudience.figures.courtier.push({ location: 'gate' });
+    for (const promote of promotionsFor(withAudience, state, config).filter((item) => item.figureIndex === figureIndex)) {
+      options.push({ type: 'courtier', audience: true, promote });
+    }
+  }
+  return options;
+}
+
+function promoteCourtier(player, decision, config, choices, depth, context) {
+  if (!context.state.castleRooms.length) fail(ERROR_CODES.DATA_UNVERIFIED, '家臣晋升需要本局城堡房间');
+  const promotion = decision.promote;
+  if (!promotion || !Number.isSafeInteger(promotion.figureIndex) || ![1, 2].includes(promotion.steps)) {
+    fail(ERROR_CODES.INVALID_ACTION, '晋升必须指定家臣序号和一层或两层步数');
+  }
+  let next = deepClone(player);
+  const figure = next.figures.courtier[promotion.figureIndex];
+  const locations = ['gate', 'floor1', 'floor2', 'floor3'];
+  const from = locations.indexOf(locationOf(figure));
+  if (from < 0 || from + promotion.steps > 3) fail(ERROR_CODES.TARGET_NOT_ALLOWED, '家臣晋升超出楼层');
+  const floor = from + promotion.steps;
+  next = payCosts(next, [{ type: 'pearl', amount: promotion.steps === 1 ? 2 : 5 }]);
+  if (floor === 3) {
+    const card = topCard(context.state, config);
+    next.figures.courtier[promotion.figureIndex] = { location: 'floor3' };
+    next = applyEffects(next, lanternEffects(next, config), config, choices, depth + 1, context);
+    const slots = card.fields.filter((field) => !context.state.topSlots[field.id]);
+    if (!slots.length) {
+      if (promotion.slotId !== undefined && promotion.slotId !== null) fail(ERROR_CODES.TARGET_FULL, '大名恩赏已无空位');
+      return next;
+    }
+    const slot = slots.find((field) => field.id === promotion.slotId);
+    if (!slot) fail(ERROR_CODES.TARGET_NOT_ALLOWED, '请选择大名卡的空槽位');
+    context.state.topSlots[slot.id] = { actor: context.actor, figureIndex: promotion.figureIndex };
+    next.figures.courtier[promotion.figureIndex].slotId = slot.id;
+    return executeField(next, slot, config, choices, depth, context);
+  }
+  const room = context.state.castleRooms.find((item) => item.id === promotion.roomId);
+  if (!room || roomFloor(room, config) !== floor) fail(ERROR_CODES.TARGET_NOT_ALLOWED, '晋升终点必须位于目标楼层');
+  const card = cardByReference(room.cardId, config);
+  const field = lightFields(card).find((item) => item.id === promotion.fieldId);
+  if (!field) fail(ERROR_CODES.TARGET_NOT_ALLOWED, '家臣到达只能选择一项浅色行动');
+  const deck = context.state.castleDecks[card.kind];
+  if (!Array.isArray(deck)) fail(ERROR_CODES.DATA_UNVERIFIED, '对应楼层牌堆尚未配置');
+  next.figures.courtier[promotion.figureIndex] = { location: `floor${floor}`, roomId: room.id };
+  if (deck.length === 0) return executeField(next, field, config, choices, depth, context);
+  const replacementId = deck.shift();
+  if (cardByReference(replacementId, config).kind !== card.kind) fail(ERROR_CODES.INVALID_STATE, '补牌与楼层牌堆类型不符');
+  next = replaceCurrentCardWithLantern(next, card.id);
+  // 先取走原房间牌，结束入场奖励后再补牌；连锁不能重复取得同一实体。
+  room.cardId = null;
+  context.state.players[context.actor] = next;
+  next = executeField(next, field, config, choices, depth, context);
+  room.cardId = replacementId;
+  return next;
+}
+
 function resolveCardAction(player, type, config, choices, depth, context) {
-  if (depth > 8) fail(ERROR_CODES.INVALID_EFFECT, '连锁行动过深');
-  const decision = nextDecision(context, type);
+  if (depth > 64) fail(ERROR_CODES.INVALID_EFFECT, '连锁行动过深');
+  player = processExchanges(player, config, context);
+  context.state.players[context.actor] = player;
+  const details = {
+    domainRows: [...context.domainRows],
+    ...(type === 'courtier' && !context.decisions[context.decisionIndex]
+      ? { options: courtierOptions(player, context.state, config) } : {}),
+  };
+  const decision = nextDecision(context, type, player, details);
   // 放弃的是卡牌提供的子行动，不能借此跳过整次取放骰。
   if (decision.skip === true) return player;
   let next = deepClone(player);
@@ -456,9 +639,9 @@ function resolveCardAction(player, type, config, choices, depth, context) {
     return executeField(next, card.fields[0], config, choices, depth, context);
   }
   if (type === 'warrior') {
-    // 手工可见面练习不声称复现实体随机抽样；完整配对确认后另加随机设置。
-    if (config.setup?.trainingMode !== 'manual-visible-faces') {
-      fail(ERROR_CODES.DATA_UNVERIFIED, '训练实体未完成配对，请显式使用手工可见面配置');
+    // 用户确认的金银独立牌池模式与旧手工可见面练习均保留显式标记。
+    if (!['manual-visible-faces', 'separate-pools'].includes(config.setup?.trainingMode)) {
+      fail(ERROR_CODES.DATA_UNVERIFIED, '训练场需要指定金银独立牌池或手工可见面模式');
     }
     const zone = confirmed(config.trainingZones?.find((item) => item.id === decision.yardId), '训练区');
     const yard = config.setup.trainingYards?.find((item) => item.id === zone.id);
@@ -470,13 +653,24 @@ function resolveCardAction(player, type, config, choices, depth, context) {
     const faces = yard.faceIds.map((id) => confirmed(config.yardFaces?.find((item) => item.id === id), '训练面'));
     if (new Set(faces.map((face) => face.tone)).size !== zone.faceTones.length
       || faces.some((face) => !zone.faceTones.includes(face.tone))) fail(ERROR_CODES.INVALID_STATE, '训练区朝向不符');
+    if (config.setup.trainingMode === 'separate-pools') {
+      for (const face of faces) {
+        const pool = confirmed(config.trainingPools?.find((item) => item.tone === face.tone), '训练池');
+        if (!Array.isArray(pool.faceIds) || !pool.faceIds.includes(face.id)) fail(ERROR_CODES.DATA_UNVERIFIED, '训练面未进入对应金银牌池');
+      }
+    }
     if (next.figures.warrior.length >= 5) fail(ERROR_CODES.TARGET_FULL, '没有可用武士');
     if (!Number.isSafeInteger(zone.ironCost) || zone.ironCost < 1) fail(ERROR_CODES.INVALID_STATE, '训练区费用无效');
     next = payCosts(next, [{ type: 'iron', amount: zone.ironCost }]);
     next.figures.warrior.push({ yardId: zone.id });
     let order = decision.faceOrder;
     if (order === undefined && faces.length === 1) order = [faces[0].id];
-    if (!Array.isArray(order)) fail(ERROR_CODES.CHOICE_REQUIRED, '必须选择训练面的执行顺序');
+    if (!Array.isArray(order)) {
+      fail(ERROR_CODES.CHOICE_REQUIRED, '必须选择训练面的执行顺序', {
+        type: 'warriorOrder', index: context.decisionIndex - 1,
+        yard, faces, player: next, state: context.state,
+      });
+    }
     if (new Set(order).size !== order.length || order.some((id) => !yard.faceIds.includes(id))) {
       fail(ERROR_CODES.INVALID_ACTION, '训练行动选择无效');
     }
@@ -484,11 +678,30 @@ function resolveCardAction(player, type, config, choices, depth, context) {
     return next;
   }
   if (type === 'courtier') {
-    if (decision.promote !== undefined) fail(ERROR_CODES.DATA_UNVERIFIED, '家臣晋升和换牌时序尚未实现');
-    if (decision.audience !== true) fail(ERROR_CODES.INVALID_ACTION, '必须明确选择谒见或放弃');
-    if (next.figures.courtier.length >= 5) fail(ERROR_CODES.TARGET_FULL, '没有可用家臣');
-    next = payCosts(next, [{ type: 'coin', amount: 2 }]);
-    next.figures.courtier.push({ location: 'gate' });
+    if (decision.promote !== undefined && (!decision.promote
+      || !Number.isSafeInteger(decision.promote.figureIndex)
+      || ![1, 2].includes(decision.promote.steps))) {
+      fail(ERROR_CODES.DATA_UNVERIFIED, '家臣晋升目标尚未配置');
+    }
+    const parts = [
+      ...(decision.audience === true ? ['audience'] : []),
+      ...(decision.promote !== undefined ? ['promote'] : []),
+    ];
+    const order = decision.order ?? parts;
+    if (!parts.length || !Array.isArray(order) || order.length !== parts.length
+      || new Set(order).size !== order.length || order.some((part) => !parts.includes(part))) {
+      fail(ERROR_CODES.INVALID_ACTION, '必须选择谒见、晋升或两者的执行顺序');
+    }
+    for (const part of order) {
+      if (part === 'audience') {
+        if (next.figures.courtier.length >= 5) fail(ERROR_CODES.TARGET_FULL, '没有可用家臣');
+        next = payCosts(next, [{ type: 'coin', amount: 2 }]);
+        next.figures.courtier.push({ location: 'gate' });
+      } else {
+        next = promoteCourtier(next, decision, config, choices, depth, context);
+      }
+      context.state.players[context.actor] = next;
+    }
     return next;
   }
   if (type === 'domain') {
@@ -550,7 +763,9 @@ function takeDie(state, action, config) {
   const [die] = nextBridge.dice.splice(action.side === 'left' ? 0 : nextBridge.dice.length - 1, 1);
   next.pendingDie = { actor, bridgeId: bridge.id, side: action.side, die };
   nextBridge.singleDieEndpoint = nextBridge.dice.length === 1
-    ? config.policy?.singleDieEndpoint ?? null
+    ? config.policy?.singleDieEndpoint === 'physical'
+      ? action.side === 'left' ? 'right' : 'left'
+      : config.policy?.singleDieEndpoint ?? null
     : null;
   return next;
 }
@@ -579,6 +794,7 @@ function placeDie(state, action, config) {
     decisions: action.decisions ?? [], decisionIndex: 0,
     effectOrders: action.effectOrders ?? [], orderIndex: 0,
     domainRows: new Set(),
+    interactive: action.interactive === true,
   };
   if (!Array.isArray(context.decisions) || context.decisions.some((item) => !item || typeof item !== 'object')
     || !Array.isArray(context.effectOrders)) fail(ERROR_CODES.INVALID_ACTION, '行动决策必须是数组');
@@ -601,7 +817,7 @@ function placeDie(state, action, config) {
     try { fields = castleFields(card, room.tiles, findBridge(state, state.pendingDie.bridgeId).color); }
     catch { fail(ERROR_CODES.DATA_UNVERIFIED, '房间骰色板块配置无效'); }
     if (!fields.length) fail(ERROR_CODES.TARGET_NOT_ALLOWED, '房间没有匹配骰色');
-    const decision = fields.length > 1 ? nextDecision(context, 'castleOrder') : null;
+    const decision = fields.length > 1 ? nextDecision(context, 'castleOrder', updated, { fields, room }) : null;
     const order = decision?.fieldIds ?? fields.map((field) => field.id);
     if (!Array.isArray(order) || order.length !== fields.length
       || [...order].sort().join('|') !== fields.map((field) => field.id).sort().join('|')) {
@@ -610,8 +826,9 @@ function placeDie(state, action, config) {
     for (const id of order) updated = executeField(updated, fields.find((field) => field.id === id), config, choices, 0, context);
   } else if (target.area === 'outside') {
     if (!['left', 'right'].includes(action.target.id)) fail(ERROR_CODES.DATA_UNVERIFIED, '城外位置未核验');
-    const decision = nextDecision(context, 'outside');
     const allowed = action.target.id === 'left' ? ['gardener', 'courtier'] : ['courtier', 'warrior'];
+    updated = processExchanges(updated, config, context);
+    const decision = nextDecision(context, 'outside', updated, { actions: allowed });
     if (!allowed.includes(decision.action)) fail(ERROR_CODES.TARGET_NOT_ALLOWED, '城外位置不能选择该行动');
     updated = applyEffects(updated, [{ type: decision.action, amount: 1 }], config, choices, 0, context);
   } else {
@@ -700,6 +917,10 @@ export function createPosition(input = {}, options = {}) {
     bridges,
     placements: buildPlacements(config, playerIds),
     castleRooms: deepClone(setup.castleRooms ?? []),
+    castleDecks: deepClone(setup.castleDecks ?? {}),
+    topCardId: setup.topCardId ?? null,
+    topSlots: deepClone(setup.topSlots ?? {}),
+    timeSequence: setup.timeSequence ?? 0,
     players,
     pendingDie: null,
     score: null,
@@ -722,6 +943,38 @@ export function applyAction(state, action, input = {}) {
     case 'exchangeSeal': return exchangeSeal(state, normalized, config);
     default: fail(ERROR_CODES.INVALID_ACTION, `未支持动作：${normalized.type}`);
   }
+}
+
+export function resolveGardenReward(state, actor, cardId, action = {}, input = {}) {
+  validateState(state);
+  assertConfigMatch(state, input);
+  const config = configDefaults(input);
+  if (!['round-end', 'round-gardens'].includes(state.phase)) {
+    fail(ERROR_CODES.INVALID_ACTION, '只有轮末可以结算花园奖励');
+  }
+  const id = actorOf(state, actor);
+  if (id !== state.activePlayer) fail(ERROR_CODES.NOT_ACTIVE_PLAYER, '应按轮末行动顺序结算花园');
+  const card = cardByReference(cardId, config);
+  if (!['plant', 'stone'].includes(card.kind) || card.fields?.length !== 1
+    || !state.players[id].figures.gardener.some((figure) => figure.cardId === cardId)) {
+    fail(ERROR_CODES.TARGET_NOT_ALLOWED, '玩家没有部署在该花园');
+  }
+  const next = deepClone(state);
+  const choices = { values: action.choices ?? [], used: 0 };
+  const context = {
+    state: next, actor: id,
+    decisions: action.decisions ?? [], decisionIndex: 0,
+    effectOrders: action.effectOrders ?? [], orderIndex: 0,
+    domainRows: new Set(),
+    interactive: action.interactive === true,
+  };
+  if (!Array.isArray(choices.values) || !Array.isArray(context.decisions)
+    || context.decisions.some((item) => !item || typeof item !== 'object')
+    || !Array.isArray(context.effectOrders)) fail(ERROR_CODES.INVALID_ACTION, '花园奖励决策必须是数组');
+  next.players[id] = executeField(next.players[id], card.fields[0], config, choices, 0, context);
+  if (choices.used !== choices.values.length || context.decisionIndex !== context.decisions.length
+    || context.effectOrders.length > context.orderIndex) fail(ERROR_CODES.INVALID_ACTION, '存在多余花园奖励决策');
+  return next;
 }
 
 function locationOf(figure) {

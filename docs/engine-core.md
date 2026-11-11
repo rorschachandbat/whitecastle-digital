@@ -2,7 +2,7 @@
 
 ## 当前交付与阶段边界
 
-本批停在**阶段一的中间验收点**：将已核验卡牌、起始选牌和一批区域行动接入纯引擎。完整阶段一仍需家臣晋升换牌、顶层槽位、影响力、轮末和完整随机开局；尚未进入合法动作模型、网页棋盘、Yucata 复盘或 AI。网页 Client 仍为骨架。
+本批提供可完成三轮的两人本地练习版。`localMatch.js` 负责选牌到终局流程，`actionOptions.js` 提供逐步决策和放置候选，boardgame.io本地Client与网页已接入。完整正式随机摆设、Yucata复盘及AI尚未完成；练习限制和启动见 [本地试玩](local-play.md)。
 
 规则依据是 [RULES.md](RULES.md)。数据核验说明见 [data-audit.md](data-audit.md)、[card-castle-audit.md](card-castle-audit.md)、[top-decree-audit.md](top-decree-audit.md) 和 [training-pairing.md](training-pairing.md)。现有源码、测试夹具和局面样本不能替代规则来源。
 
@@ -15,14 +15,18 @@ src/data/catalog.js：结构校验、规范化序列化、SHA-256
            ↓ 显式传入 config
 src/engine/cardRules.js：个人牌布局、骰色与字段引用
 src/engine/startingDraft.js：独立起始选牌阶段
-src/engine/engine.js：实验局面、原子行动、部分计分
-           ↓ 后续适配，当前未接入
-合法动作模型 → boardgame.io / 网页 / Yucata 复盘 / AI
+src/engine/engine.js：原子行动、连锁与计分
+src/engine/localMatch.js：选牌、三轮、轮末与存档
+src/engine/actionOptions.js：试走和逐步决策候选
+           ↓ 已接入本地Client及网页
+src/game/localClient.js → scripts/serve-play.mjs → play.html
+           ↓ 后续适配
+Yucata 复盘 / AI
 ```
 
 - 引擎不读取文件，不访问网络、DOM 或训练框架。配置使用稳定 ID、结构化费用和效果，不使用中文说明文本判断规则。
 - 当前目录含 55 张两人实体卡：植物/石头花园各 5、起始资源 9、起始行动 6、一层 9、二层 9、三层 9、敕令 3。起始行动保留三种设计各两张的独立实体 ID；一层、二层按人数标记筛选。
-- 另有 3 排个人面板、16 个基础训练场单面和 3 个训练区费用/计分系数。8 个训练实体的 `faceIds` 保持空数组及 `pending`，不得推断正反配对。
+- 另有3排个人面板、金银各8块训练板块和3个训练区费用/计分系数。`trainingPools` 分池保存，`tokens` 为空；不存在金银正反配对。
 - `unclassifiedAssets` 中另外 2 个训练面保持 `enabled:false`，不进入基础版 `yardFaces` 或抽样。
 - `imageSources` 保存本地来源路径和哈希；编辑器展示文字与数值预览。目录录入了某个图标，不代表引擎已经实现其效果。
 - 组件编辑不能修改两人基础规则常量：每轮每人 3 次、资源上限 7、印章上限 5、个人比较值 6、水井比较值 1。
@@ -73,7 +77,7 @@ const state = createPosition(positionConfig, { seed: 'practice-1' });
 | `createPosition(config, { seed })` | 建立两人 `core-incomplete` 实验状态；同种子同配置可复现三色九骰，其他开局摆设需显式配置 |
 | `applyAction(state, action, config)` | 返回新状态；失败抛带稳定 `code` 的 `EngineError`，原状态不变 |
 | `score(state, config)` | 返回各项小计、缺失资料和 `complete`；该值只描述本次计分资料是否齐全，不代表完整引擎或完整对局已实现 |
-| `replaceCurrentCardWithLantern(player, nextCard)` | 不可变换牌 helper，不是可任意调用的玩家动作，也不代表晋升换牌已实现 |
+| `replaceCurrentCardWithLantern(player, nextCard)` | 不可变换牌helper；晋升流程内部完成换牌，不能作为任意玩家动作调用 |
 | `personalField(card, row)` | 解析个人行动字段：起始牌共用 `action`，一层按上中下，二层按明确的印刷行布局 |
 | `castleFields(card, tiles, color)` / `lightFields(card)` | 返回匹配骰色或浅色的字段引用，不自行发放收益、不校验完整随机摆设 |
 
@@ -108,7 +112,8 @@ const state = createPosition(positionConfig, { seed: 'practice-1' });
 |---|---|
 | 园丁 | `{type:'gardener', cardId}`；支付花园食物费并部署，默认激活该牌；可加 `activate:false` 表示只部署 |
 | 训练 | `{type:'warrior', yardId, faceOrder:[faceId,...]}`；支付训练区铁费并部署，按给定次序激活所选可见面；单面可省略 `faceOrder` |
-| 家臣谒见 | `{type:'courtier', audience:true}`；支付 2 金币，在城门部署家臣；`promote` 当前明确拒绝 |
+| 家臣 | `{type:'courtier', audience:true, promote:{figureIndex,steps,roomId,fieldId}}`；可谒见、晋升或两者，`order` 指定先后；晋升三层改用 `slotId` 选择空槽 |
+| 影响力关卡 | `{type:'influence', gate:6, pay:true}`；关卡逐次收费，拒付部分移动是显式练习处理 |
 | 个人面板图标 | `{type:'domain', row:'gardener'}`；执行指定排可见收益与当前牌字段，同一次动作不能借图标重复激活同一排 |
 | 城堡图标 | `{type:'castleLight', roomId, fieldId}` 等；支持 `castleAny`、`castleCoral`、`castleBlack`、`castleWhite`，分别检查浅色或骰色关联 |
 | 城堡同色多字段 | `{type:'castleOrder', fieldIds:[...]}`；必须完整排列所有匹配字段，随后各字段产生的决策继续按执行顺序提供 |
@@ -124,7 +129,22 @@ const state = createPosition(positionConfig, { seed: 'practice-1' });
 { "type": "exchangeSeal", "actor": "0", "amount": 2, "resource": "iron" }
 ```
 
-`amount=1` 得 1 金币，`amount=2` 得指定资源；仅当前玩家可用，不消耗正常放骰次数。本批不支持在原子连锁中途插入独立兑换。
+`amount=1` 得1金币，`amount=2` 得指定资源；仅当前玩家可用，不消耗正常放骰次数。连锁中的兑换以同形状决策放入 `decisions`，属于同一原子动作，失败一起回退。
+
+## 本地对局与交互API
+
+| 接口 | 行为 |
+|---|---|
+| `createLocalMatch(catalog, {seed, playOrder?})` | 生成练习配置与逆序选牌阶段；同种子可复现，明确记录配置限制 |
+| `applyLocalAction(match, action)` | 处理选牌、原子行动、轮末花园及兑换，返回独立状态 |
+| `activeLocalPlayer(match)` | 返回当前作出决策者；选牌和轮末也使用此入口 |
+| `probeLocalAction(match, action)` | 试走并返回 `choice`、`ready` 或 `invalid`，不改原局面 |
+| `chooseActionOption(probe, value)` | 按请求索引填充资源、决策或效果顺序 |
+| `placementOptions(match, bridgeId, side)` | 过滤骰色、容量和先付金币；子行动由试走继续检查，不是完整AI动作枚举 |
+| `exportLocalMatch` / `importLocalMatch` | 保存目录快照、种子、选项和动作；导入时重放，不信任外部附带状态 |
+| `replayLocalMatch(match, count)` | 重放至指定动作数，用于撤销和复现 |
+
+`interactive:true` 会在字段执行、同组效果排序和子行动前抛出结构化 `CHOICE_REQUIRED`，由试走捕获。网页只提交完成的动作，预览阶段不改变实际对局。
 
 ## 实验局面配置
 
@@ -136,16 +156,16 @@ const state = createPosition(positionConfig, { seed: 'practice-1' });
 | `setup.playOrder` / `setup.initialPlayer` | 两人行动顺序和初始行动者；顶层 `config.initialPlayer` 存在时优先 |
 | `setup.bridges` | 可显式给三色各三骰；顶层 `config.bridges` 优先，缺失时仅用种子生成骰子 |
 | `setup.gardens` | `[{cardId, bridgeId}]`；仅这些花园可用于园丁部署，不会自动从目录抽取六张 |
-| `setup.trainingMode` | 必须显式为 `manual-visible-faces` 才开放当前训练练习 |
+| `setup.trainingMode` | `separate-pools` 使用金银池；`manual-visible-faces` 用于手工指定摆设 |
 | `setup.trainingYards` | `[{id:'yard-cost-1', faceIds:['yard-face-15']}]` 等；训练区 ID、面数和朝向须与 `trainingZones` 对应，同一面不可重复 |
 | `setup.castleRooms` | `[{id, cardId, tiles:[{color, fieldId}]}]`；保存房间牌与骰色板块引用，不自动完成正式随机摆设 |
-| `setup.placements` | 例如 `'castle:room-a':{area:'castle',comparisonValue:6}`；城堡及城外位置需显式提供已核验比较值，两人容量为 1 |
+| `setup.placements` | 例如 `'castle:floor1-1':{area:'castle',comparisonValue:3}`；一层3、二层4、城外5，两人容量为1 |
 | `setup.fixtureVersion` / `setup.wellRewards` | 水井仅接受 `fixtureVersion:'well-rewards-v1'` 的显式实验收益，再额外给 1 印章；不能把训练面冒充正式水井组件 |
-| `policy.singleDieEndpoint` | 桥只余一骰时的端点策略；默认 `null`，资料不足时拒绝取骰，不猜是否给灯笼 |
+| `policy.singleDieEndpoint` | 本地练习使用 `physical` 保留最后一骰原端点；局部实验默认 `null`，端点未明确时拒绝取骰 |
 
 顶层 `config.players`、`config.bridges`、`config.placements`、`config.wellRewards` 会优先于相应 `setup` 字段，整合配置时避免同时保留不同版本。
 
-训练区当前记录：1 铁区为 1 个资源面、系数 1；3 铁区为 1 个行动面、系数 1；5 铁区为资源/行动各 1 面、系数 2。手工选择可见面仅用于指定局面练习，不等价于按 8 个实体抽取 4 个的正式开局。
+训练区当前记录：1铁区金色1块、系数1；3铁区银色1块、系数1；5铁区金银各1块、系数2。开局各池抽2且同池无放回，后续轮次不重抽。`resource/action` 是兼容旧转录ID的色系标识，不表示板块只能给资源或只能行动。
 
 ## 已支持与未完成项
 
@@ -153,9 +173,9 @@ const state = createPosition(positionConfig, { seed: 'practice-1' });
 - 园丁、武士和城门家臣保存在人员数组，受可用人员数量约束；园丁不能在同一花园重复部署自己。人员不会在本次动作后自动回收。
 - 支持按配置城堡放骰匹配全部同色字段、显式排序，以及城外左右位置对应人员行动；个人排骰色、比较值 6、容量 1。
 - `score` 提供金币/印章、资源、花园、家臣位置、训练系数及已配置时间轨的分项。训练分数按区系数乘城内家臣数，不把即时训练收益当作终局系数；缺失资料或同分顺序时不猜赢家。
-- **未实现**家臣晋升、替换城堡牌及到达流程、顶层共享槽位占用、影响力与轮末次序。三层卡数据和浅色字段助手不代表这些流程已实现；遇到未实现效果返回错误。
-- 六次正常放骰后停在 `round-end`，不自动触发轮末花园、掷骰或进入下一轮。当前不能完成三轮正式对局。
-- 没有 `getLegalActions`、完整随机开局、完整存档导入、玩家视角过滤或训练接口；当前状态不得作为对外玩家视角直接发布。
+- 已实现家臣晋升换牌、浅色到达奖励、顶层共享槽位、影响力及轮末流程，支持三轮18次放骰后计分。
+- 局部 `applyAction` 仍止于 `round-end`；`applyLocalAction` 才接续新顺序、花园、下一轮及终局。轮末资格固定取阶段开始时合格园丁列表，此练习处理待核验。
+- 尚无完整 `getLegalActions`、正式板块库存抽样、联网玩家视角过滤或训练接口；当前服务只用于同机轮流操作。
 
 ## 本批验收与推荐验证
 
@@ -177,6 +197,6 @@ npm run config
 3. 选牌后把结果写入新配置的 `setup.players`；用新配置创建局面，确认用旧配置执行动作会拒绝。
 4. 检查园丁部署/不激活、训练两面先后、城堡先得印章再付费及反向顺序失败；失败后对比原骰子、资产和人员。
 5. 检查字段整体放弃与子行动放弃的费用差异，组合收益的 `effectOrders` 使用 `null` 保留前组原次序。
-6. 确认训练实体仍未配对、额外两面仍禁用、未出现“开始完整对局”的入口；触发影响力或晋升应明确拒绝。
+6. 执行 `npm run play` 验收训练金银两池抽样、晋升、三轮计分与存档重放；额外两面仍禁用，界面须显示练习限制。
 
 已有局部编辑器验证不能代替以上矩阵。生产构建需用户自行运行 `npm run build`、`npm run preview`，或在当前请求中明确授权后再执行。

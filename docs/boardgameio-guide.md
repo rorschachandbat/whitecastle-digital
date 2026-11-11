@@ -58,7 +58,7 @@ interface WhiteCastleState {
 
 `G` 应保存规则所需的数值和卡牌 ID，不直接保存 React 组件或 DOM 节点。卡牌效果应使用结构化数据表示，避免在 move 中解析展示文本。
 
-这里的接口只描述目标状态形状。当前仓库的 `src/game/game.js` 仍是 `mode=scaffold` 骨架，不能据此推断桥、城堡、花园或牌堆已经可玩。
+这里的接口描述架构参考。当前 `src/game/game.js` 保留 `WhiteCastle` 工作台骨架，并新增 `createLocalGame` 承载真实两人练习对局。`localClient.js` 在Node使用已发布的公共Client入口，`npm run play` 通过本机HTTP服务驱动原生模块网页，不转译或构建；实际范围及限制见 [local-play.md](local-play.md)。
 
 ### `ctx`：框架状态
 

@@ -37,7 +37,8 @@ test('用户原图目录只启用两人55实体卡，起始行动每种两份，
   assert.deepEqual(raw.cards.filter((card) => card.kind === 'diplomat').map((card) => card.sourcePosition),
     [1, 2, 3, 4, 5, 7, 9, 11, 12]);
   assert.ok(raw.cards.filter((card) => ['steward', 'diplomat'].includes(card.kind)).every((card) => card.playerCounts.join() === '2'));
-  assert.ok(raw.tokens.every((token) => token.verification === 'pending' && token.faceIds.length === 0));
+  assert.equal(raw.tokens.length, 0);
+  assert.equal(raw.trainingPools.length, 2);
   assert.equal(raw.unclassifiedAssets.length, 2);
   assert.ok(raw.unclassifiedAssets.every((item) => item.enabled === false));
 });

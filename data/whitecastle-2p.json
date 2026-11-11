@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": 2,
+  "revision": 3,
   "playerCount": 2,
   "status": "partial",
   "limits": {
@@ -2739,56 +2739,7 @@
       "additionalSourceRef": "image:training-asset-2153342442631898740"
     }
   ],
-  "tokens": [
-    {
-      "id": "yard-token-1",
-      "verification": "pending",
-      "faceIds": [],
-      "sourceRef": ""
-    },
-    {
-      "id": "yard-token-2",
-      "verification": "pending",
-      "faceIds": [],
-      "sourceRef": ""
-    },
-    {
-      "id": "yard-token-3",
-      "verification": "pending",
-      "faceIds": [],
-      "sourceRef": ""
-    },
-    {
-      "id": "yard-token-4",
-      "verification": "pending",
-      "faceIds": [],
-      "sourceRef": ""
-    },
-    {
-      "id": "yard-token-5",
-      "verification": "pending",
-      "faceIds": [],
-      "sourceRef": ""
-    },
-    {
-      "id": "yard-token-6",
-      "verification": "pending",
-      "faceIds": [],
-      "sourceRef": ""
-    },
-    {
-      "id": "yard-token-7",
-      "verification": "pending",
-      "faceIds": [],
-      "sourceRef": ""
-    },
-    {
-      "id": "yard-token-8",
-      "verification": "pending",
-      "faceIds": [],
-      "sourceRef": ""
-    }
-  ],
+  "tokens": [],
   "sources": [
     {
       "id": "rules",
@@ -3111,5 +3062,39 @@
       8,
       10
     ]
-  }
+  },
+  "trainingPools": [
+    {
+      "id": "gold",
+      "tone": "resource",
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/en/Rules/WhiteCastle",
+      "faceIds": [
+        "yard-face-9",
+        "yard-face-10",
+        "yard-face-11",
+        "yard-face-12",
+        "yard-face-13",
+        "yard-face-14",
+        "yard-face-15",
+        "yard-face-16"
+      ]
+    },
+    {
+      "id": "silver",
+      "tone": "action",
+      "verification": "confirmed",
+      "sourceRef": "https://www.yucata.de/en/Rules/WhiteCastle",
+      "faceIds": [
+        "yard-face-1",
+        "yard-face-2",
+        "yard-face-3",
+        "yard-face-4",
+        "yard-face-5",
+        "yard-face-6",
+        "yard-face-7",
+        "yard-face-8"
+      ]
+    }
+  ]
 }

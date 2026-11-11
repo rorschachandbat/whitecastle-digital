@@ -12,7 +12,7 @@ const required = [
   'docs/RULES.md', 'docs/boardgameio-guide.md', 'docs/implementation-plan.md',
   'docs/development-workflow.md', 'docs/sources.md', 'docs/deployment.md', 'docs/data-audit.md', 'docs/CHANGELOG.md',
   'src/game/CHANGELOG.md', 'src/ui/CHANGELOG.md', 'src/data/CHANGELOG.md', 'src/engine/CHANGELOG.md',
-  'docs/engine-core.md',
+  'docs/engine-core.md', 'docs/local-play.md', 'play.html',
   'docs/card-castle-audit.md', 'docs/top-decree-audit.md', 'docs/training-pairing.md',
   'docs/starting-card-audit.md',
   'scripts/CHANGELOG.md', 'tests/CHANGELOG.md', 'config-editor.html', 'data/whitecastle-2p.json',
@@ -26,15 +26,18 @@ for (const name of required) {
 const sourceFiles = [
   'src/main.js', 'src/ui/configEditor.js', 'src/engine/engine.js',
   'src/engine/cardRules.js', 'src/engine/startingDraft.js', 'src/data/catalog.js',
+  'src/ui/play.js', 'src/engine/localMatch.js', 'src/engine/actionOptions.js',
+  'src/engine/influence.js', 'src/game/game.js', 'src/game/localClient.js', 'scripts/serve-play.mjs',
 ];
 const source = sourceFiles
+  .filter((name) => name === 'src/main.js' || name.startsWith('src/ui/'))
   .map((name) => fs.readFileSync(path.join(root, name), 'utf8'))
   .join('\n');
 const keys = [...source.matchAll(/(?:text|element)\(\s*['"]([^'"]+)['"]/g)]
   .filter((match) => match[0].startsWith('text'))
   .map((match) => match[1]);
 // 页面文案有些以数组形式传递，额外检查全部已声明的文案键。
-for (const match of source.matchAll(/['"]((?:app|status|framework|rules|guide|plan|workflow|changelog|roadmap|footer|editor)\.[A-Za-z.]+)['"]/g)) {
+for (const match of source.matchAll(/['"]((?:app|status|framework|rules|guide|plan|workflow|changelog|roadmap|footer|editor|play)\.[A-Za-z0-9_.]+)['"]/g)) {
   keys.push(match[1]);
 }
 for (const key of keys) {

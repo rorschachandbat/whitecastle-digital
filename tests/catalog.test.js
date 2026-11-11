@@ -13,7 +13,8 @@ test('两人数据目录可解析，花园数量与训练单面数量符合已�
   assert.equal(config.cards.filter((card) => card.kind === 'plant').length, 5);
   assert.equal(config.cards.filter((card) => card.kind === 'stone').length, 5);
   assert.equal(config.yardFaces.length, 16);
-  assert.equal(config.tokens.length, 8);
+  assert.equal(config.tokens.length, 0);
+  assert.deepEqual(config.trainingPools.map((pool) => pool.faceIds.length), [8, 8]);
 });
 
 test('个人面板颜色与人员不能互换，已核验混合收益包含币印章和灯笼', () => {
@@ -29,15 +30,14 @@ test('个人面板颜色与人员不能互换，已核验混合收益包含币�
   assert.ok(validateCatalog(invalid).some((issue) => issue.code === 'rowMapping'));
 });
 
-test('确认训练实体必须有两个独立存在且未复用的面', () => {
+test('训练独立池拒绝重复、跨色及遗漏板块，不再要求正反配对', () => {
   const invalid = copy();
-  invalid.tokens[0].verification = 'confirmed';
-  invalid.tokens[0].sourceRef = 'https://example.com/evidence';
-  assert.ok(validateCatalog(invalid).some((issue) => issue.code === 'pairRequired'));
-  invalid.tokens[0].faceIds = ['yard-face-1', 'yard-face-1'];
-  assert.ok(validateCatalog(invalid).some((issue) => issue.code === 'faceReference'));
-  invalid.tokens[0].faceIds = ['yard-face-1', 'yard-face-2'];
-  assert.ok(validateCatalog(invalid).some((issue) => issue.code === 'faceSides'));
+  invalid.trainingPools[0].faceIds[0] = 'yard-face-1';
+  assert.ok(validateCatalog(invalid).some((issue) => issue.code === 'poolReference'));
+  assert.ok(validateCatalog(invalid).some((issue) => issue.code === 'poolCoverage'));
+  const duplicate = copy();
+  duplicate.trainingPools[0].faceIds[0] = duplicate.trainingPools[0].faceIds[1];
+  assert.ok(validateCatalog(duplicate).some((issue) => issue.code === 'poolReference'));
 });
 
 test('配置拒绝未知效果、负数量、付费行动当资源费用及缺失核验来源', () => {

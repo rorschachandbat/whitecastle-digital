@@ -2,7 +2,7 @@
 
 ## 当前交付
 
-当前已提供规则基准、boardgame.io 工作台骨架、两人可编辑数据目录、配置编辑器和纯规则引擎第一批核心。网页 Client 仍为骨架，完整规则引擎及合法动作枚举尚未完成；本批范围见 [engine-core.md](engine-core.md)。
+当前已提供规则基准、两人可编辑目录、配置编辑器和同机双人三轮练习版。纯规则、逐步决策、boardgame.io Client及网页已接通；尚需核验完整板块随机摆设，再进入完整动作枚举、Yucata复盘和AI。当前验收入口见 [local-play.md](local-play.md)，API见 [engine-core.md](engine-core.md)。
 
 本计划描述后续工作，不代表完整规则引擎、网页对局、自动部署或 AI 已经完成。每个阶段完成时更新根目录及相关模块的 CHANGELOG，报告实际检查结果后提交、推送。
 

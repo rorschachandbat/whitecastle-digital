@@ -8,6 +8,16 @@ const raw = fs.readFileSync(new URL('../data/whitecastle-2p.json', import.meta.u
 const config = JSON.parse(raw);
 const copy = () => structuredClone(config);
 
+test('大名左槽纠正图标且保留本地牌号和其余两槽', () => {
+  const tops = config.cards.filter((card) => card.kind === 'top');
+  assert.deepEqual(tops.map((card) => card.fields[0].effects), [
+    'well', 'castleLight', 'lantern', 'castleLight', 'castleLight',
+    'well', 'well', 'lantern', 'lantern',
+  ].map((type) => [{ type, amount: 1 }]));
+  assert.deepEqual(tops.find((card) => card.id === 'top-5').fields.slice(1).map((field) => field.effects),
+    [[{ type: 'pearl', amount: 2 }], [{ type: 'points', amount: 2 }]]);
+});
+
 test('两人数据目录可解析，花园数量与训练单面数量符合已核验组件', () => {
   assert.deepEqual(parseCatalog(raw), config);
   assert.equal(config.cards.filter((card) => card.kind === 'plant').length, 5);

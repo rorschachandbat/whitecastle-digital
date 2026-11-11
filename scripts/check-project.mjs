@@ -19,6 +19,8 @@ const required = [
   'docs/ai-training.md', 'docs/ai-training-results.md', 'src/ai/CHANGELOG.md', 'data/ai-heuristic.json', 'requirements-ai.txt',
   'docs/ai-coach.md', 'data/ai-training-loop.json', 'scripts/train-loop.py', 'scripts/train-ai.ps1',
   'scripts/analyze-position.py',
+  'docs/bga-import.md', 'data/bga-mapping.json', 'bga-replay.html',
+  'src/integrations/bgaDom.js', 'src/integrations/bgaReplay.js', 'src/integrations/CHANGELOG.md',
 ];
 for (const name of required) {
   if (!fs.existsSync(path.join(root, name))) {
@@ -33,6 +35,8 @@ const sourceFiles = [
   'src/engine/influence.js', 'src/game/game.js', 'src/game/localClient.js', 'scripts/serve-play.mjs',
   'src/ai/environment.js', 'src/ai/features.js', 'src/ai/heuristicPolicy.js',
   'scripts/ai-common.mjs', 'scripts/ai-env-server.mjs', 'scripts/generate-training-data.mjs',
+  'src/ui/bgaReplay.js', 'src/integrations/bgaDom.js', 'src/integrations/bgaReplay.js',
+  'scripts/import-bga-replay.mjs',
 ];
 const source = sourceFiles
   .filter((name) => name === 'src/main.js' || name.startsWith('src/ui/'))
@@ -42,7 +46,7 @@ const keys = [...source.matchAll(/(?:text|element)\(\s*['"]([^'"]+)['"]/g)]
   .filter((match) => match[0].startsWith('text'))
   .map((match) => match[1]);
 // 页面文案有些以数组形式传递，额外检查全部已声明的文案键。
-for (const match of source.matchAll(/['"]((?:app|status|framework|rules|guide|plan|workflow|changelog|roadmap|footer|editor|play)\.[A-Za-z0-9_.]+)['"]/g)) {
+for (const match of source.matchAll(/['"]((?:bga|app|status|framework|rules|guide|plan|workflow|changelog|roadmap|footer|editor|play)\.[A-Za-z0-9_.]+)['"]/g)) {
   keys.push(match[1]);
 }
 for (const key of keys) {

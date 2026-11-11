@@ -1,6 +1,13 @@
 // 时间轨参数由当前局面的版本化配置提供，不从第三方实现推测。
 import { EngineError } from './engine.js';
 
+// R-INFLUENCE-01 已核验的格分；本地摆设与外部计分共用，避免两套数值。
+export const VERIFIED_TIME_SCORES = Object.freeze(Object.fromEntries(
+  Array.from({ length: 21 }, (_, position) => [
+    position, position < 6 ? 0 : position < 11 ? 3 : position < 15 ? 6 : 10 + position - 15,
+  ]),
+));
+
 function fail(code, details) {
   throw new EngineError(code, code, details);
 }

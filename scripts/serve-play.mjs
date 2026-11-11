@@ -18,9 +18,11 @@ const sourceRoutes = [
   'src/ui/play.js', 'src/ui/play.css', 'src/ui/StringTable.js', 'src/ui/configEditor.js', 'src/ui/styles.css',
   'src/engine/actionOptions.js', 'src/engine/localMatch.js', 'src/engine/engine.js',
   'src/engine/startingDraft.js', 'src/engine/influence.js', 'src/engine/cardRules.js', 'src/data/catalog.js',
+  'src/ui/bgaReplay.js',
 ];
 const routes = new Map([
   ['/', 'play.html'], ['/play.html', 'play.html'], ['/config-editor.html', 'config-editor.html'],
+  ['/bga-replay.html', 'bga-replay.html'],
   ['/data/whitecastle-2p.json', 'data/whitecastle-2p.json'],
   ...sourceRoutes.map((name) => [`/${name}`, name]),
 ]);

@@ -108,6 +108,30 @@ test('三层全满仍可到达并拿灯笼，不额外获取任一槽奖励', ()
   assert.deepEqual(next.topSlots, config.setup.topSlots);
 });
 
+test('top-5 左槽执行城堡浅色收益，先灯笼，不激活个人排或骰差额', () => {
+  const config = fixture({
+    resources: { coin: 0, pearl: 2 },
+    figures: { courtier: [{ location: 'floor2' }] },
+    lanternCardIds: ['decree-points'],
+  });
+  config.setup.topCardId = 'top-5';
+  const state = createPosition(config);
+  const before = structuredClone(state);
+  const next = place(state, config, [
+    { type: 'courtier', promote: { figureIndex: 0, steps: 1, slotId: 'left' } },
+    { type: 'castleLight', roomId: 'floor1-a', fieldId: 'middle' },
+  ]);
+  assert.equal(next.players['0'].resources.points, 1);
+  assert.equal(next.players['0'].resources.pearl, 2);
+  assert.equal(next.players['0'].resources.coin, 0);
+  assert.deepEqual(next.topSlots, { left: { actor: '0', figureIndex: 0 } });
+  assert.deepEqual(state, before);
+  fails(() => place(state, config, [
+    { type: 'courtier', promote: { figureIndex: 0, steps: 1, slotId: 'left' } },
+    { type: 'castleLight', roomId: 'floor1-a', fieldId: 'bottom' },
+  ]), 'TARGET_NOT_ALLOWED');
+});
+
 test('非法楼层、深色字段、空位和费用不足全部原子拒绝', () => {
   const config = fixture({ resources: { pearl: 2 }, figures: { courtier: [{ location: 'gate' }] } });
   const state = createPosition(config), before = structuredClone(state);

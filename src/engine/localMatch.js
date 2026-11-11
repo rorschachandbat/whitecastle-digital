@@ -1,6 +1,7 @@
 import { canonicalCatalog, validateCatalog } from '../data/catalog.js';
 import { createPosition, applyAction, resolveGardenReward, score, EngineError } from './engine.js';
 import { createStartingDraft, chooseStartingPair } from './startingDraft.js';
+import { VERIFIED_TIME_SCORES } from './influence.js';
 
 export const LOCAL_MATCH_VERSION = 1;
 export const LOCAL_PROFILE_ID = 'local-practice-v1';
@@ -133,9 +134,7 @@ function positionConfig(catalog, options) {
     fixtureVersion: 'verified-time-track-v1', max: 20,
     gates: [{ at: 6, cost: 1 }, { at: 11, cost: 2 }, { at: 15, cost: 3 }],
   };
-  config.timeTrack = Object.fromEntries(Array.from({ length: 21 }, (_, position) => [
-    position, position < 6 ? 0 : position < 11 ? 3 : position < 15 ? 6 : 10 + position - 15,
-  ]));
+  config.timeTrack = clone(VERIFIED_TIME_SCORES);
   config.setup = {
     playOrder: [...options.playOrder], initialPlayer: options.playOrder[0],
     gardens, castleRooms,

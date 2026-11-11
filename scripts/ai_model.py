@@ -1,5 +1,6 @@
 """独立于卡牌 JSON 的策略及价值网络与本地规则协议。"""
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import torch
 from torch import nn
 
 ROOT = Path(__file__).resolve().parents[1]
-META_KEYS = ("profile", "featureVersion", "actionModelVersion", "catalogHash", "heuristicHash")
+META_KEYS = ("profile", "featureVersion", "actionModelVersion", "catalogHash", "heuristicHash", "encoderHash")
 
 
 class PolicyValue(nn.Module):
@@ -60,7 +61,7 @@ def load_checkpoint(path, expected_meta=None):
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     if expected_meta:
         for key in META_KEYS:
-            if checkpoint["meta"][key] != expected_meta[key]:
+            if checkpoint["meta"].get(key) != expected_meta[key]:
                 raise ValueError(f"AI_MODEL_CONFIG_MISMATCH:{key}")
     model = PolicyValue(checkpoint["state_size"], checkpoint["option_size"])
     model.load_state_dict(checkpoint["model"])
@@ -75,8 +76,11 @@ class RulesProcess:
             command += ["--catalog", str(Path(catalog).resolve())]
         if weights:
             command += ["--weights", str(Path(weights).resolve())]
+        # 子进程不接收终端的中断广播；父进程在完整对局边界保存后自行关闭规则进程。
+        process_options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+                           if os.name == "nt" else {"start_new_session": True})
         self.process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.PIPE,
-                                        stdout=subprocess.PIPE, encoding="utf-8", bufsize=1)
+                                        stdout=subprocess.PIPE, encoding="utf-8", bufsize=1, **process_options)
 
     def request(self, **request):
         self.process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")

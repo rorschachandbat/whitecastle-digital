@@ -2,6 +2,7 @@
 import argparse
 import copy
 import gzip
+import hashlib
 import json
 import math
 import random
@@ -28,6 +29,8 @@ def load_dataset(path):
         rows = [json.loads(line) for line in handle if line.strip()]
     if not rows:
         raise ValueError("AI_EMPTY_DATA")
+    if any(key not in rows[0] for key in META_KEYS):
+        raise ValueError("AI_DATA_METADATA_VERSION_MISMATCH")
     meta = {key: rows[0][key] for key in META_KEYS}
     if (len(rows) != manifest["records"] or len({row["game"] for row in rows}) != manifest["completed"]
             or any(manifest[key] != meta[key] for key in META_KEYS)):
@@ -104,7 +107,8 @@ def distill(model, optimizer, train, validation, epochs, rng):
             "validation": metrics(model, validation), "history": history}
 
 
-def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_games, resume=None):
+def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_games, resume=None,
+              league=None, experience_dir=None):
     history = []
     # 固定预热快照作为对手，每局交换网络方座位；一半对局为共享网络自我对弈。
     opponent = copy.deepcopy(model).eval()
@@ -121,10 +125,16 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
         seed = f"{seed_prefix}-{next_seed}"
         next_seed += 1
         observation = rules.request(op="reset", seed=seed, playOrder=["0", "1"])
+        # 长期循环按固定节奏混合共享网络、攻略与历史对手；普通命令保留原有行为。
+        mode = (previous + game) % 4 if league else None
+        rival = league[((previous + game) // 4) % len(league)] if mode in (2, 3) else opponent
         trajectory = []
+        records = []
         while not observation["done"]:
             actor = observation["actor"]
-            learner = (previous + game) % 2 == 0 or actor == str(((previous + game) // 2) % 2)
+            league_seat = str(((previous + game) // 4 + int(mode == 3)) % 2)
+            learner = ((mode == 0 or actor == league_seat) if league
+                       else (previous + game) % 2 == 0 or actor == str(((previous + game) // 2) % 2))
             if learner:
                 model.train()
                 logits, value = infer(model, observation)
@@ -133,9 +143,16 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
                 trajectory.append((actor, distribution.log_prob(action), value, distribution.entropy()))
                 index = action.item()
             else:
-                with torch.no_grad():
-                    logits, _ = infer(opponent, observation)
-                    index = Categorical(logits=logits).sample().item()
+                if mode == 1:
+                    index = max(range(len(observation["heuristic"])), key=observation["heuristic"].__getitem__)
+                else:
+                    with torch.no_grad():
+                        logits, _ = infer(rival, observation)
+                        index = Categorical(logits=logits).sample().item()
+            if experience_dir:
+                records.append({**meta, "game": seed, "step": len(records), "actor": actor,
+                                "state": observation["state"], "candidates": observation["candidates"],
+                                "action": index, "learner": learner, "request": observation["request"]})
             observation = rules.request(op="step", index=index)
         if observation["placements"] != 18 or not observation["score"]["complete"]:
             raise RuntimeError("AI_INCOMPLETE_ROLLOUT")
@@ -152,8 +169,24 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
         nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
         result = {"game": game + 1, "seed": seed, "loss": loss.item(), "entropy": entropy.item(),
-                  "decisions": observation["decisions"], "score": observation["score"]}
+                  "decisions": observation["decisions"], "score": observation["score"],
+                  "opponent": "self" if mode == 0 else "guide" if mode == 1 else "history" if league else "legacy"}
         history.append(result)
+        if experience_dir:
+            # 完整终局按种子写独立分片；当前优化器不重复采样旧经验。
+            folder = Path(experience_dir)
+            folder.mkdir(parents=True, exist_ok=True)
+            shard = folder / (hashlib.sha256(seed.encode()).hexdigest() + ".jsonl.gz")
+            temporary = shard.with_suffix(shard.suffix + ".tmp")
+            with gzip.open(temporary, "wt", encoding="utf-8") as handle:
+                for row in records:
+                    row["z"] = 1 if observation["score"]["winner"] == row["actor"] else -1
+                    handle.write(json.dumps(row) + "\n")
+            temporary.replace(shard)
+            shard.with_suffix(".manifest.json").write_text(
+                json.dumps({**meta, "format": "selfplay-experience-v1", "game": seed,
+                            "records": len(records), "placements": 18, "complete": True,
+                            "training": result}), encoding="utf-8")
         seen_games.add(seed)
         save_checkpoint(output, model, meta, phase="selfplay", selfplayTotal=previous + game + 1,
                         seenGames=sorted(seen_games), optimizer=optimizer.state_dict(),

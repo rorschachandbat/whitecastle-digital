@@ -14,6 +14,10 @@ for await (const line of readline.createInterface({ input: process.stdin, crlfDe
     let result;
     if (request.op === 'info') result = meta;
     else if (request.op === 'reset') result = environment.reset(request.seed, request.playOrder);
+    else if (request.op === 'load') {
+      result = environment.restore(request.save);
+      for (const index of request.choices ?? []) result = environment.step(index);
+    }
     else if (request.op === 'step' && environment.match) result = environment.step(request.index);
     else if (request.op === 'replay' && environment.match) result = exportLocalMatch(environment.match);
     else throw new Error('AI_INVALID_REQUEST');

@@ -46,6 +46,11 @@ class ModelTests(unittest.TestCase):
                 self.assertTrue(torch.equal(old, new))
             with self.assertRaisesRegex(ValueError, "CONFIG_MISMATCH"):
                 load_checkpoint(path, {**meta, "catalogHash": "changed"})
+            with self.assertRaisesRegex(ValueError, "CONFIG_MISMATCH:encoderHash"):
+                load_checkpoint(path, {**meta, "encoderHash": "changed-code"})
+            save_checkpoint(path, model, {key: value for key, value in meta.items() if key != "encoderHash"})
+            with self.assertRaisesRegex(ValueError, "CONFIG_MISMATCH:encoderHash"):
+                load_checkpoint(path, meta)
 
 
 if __name__ == "__main__":

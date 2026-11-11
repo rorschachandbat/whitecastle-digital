@@ -17,6 +17,8 @@ const required = [
   'docs/starting-card-audit.md',
   'scripts/CHANGELOG.md', 'tests/CHANGELOG.md', 'config-editor.html', 'data/whitecastle-2p.json',
   'docs/ai-training.md', 'docs/ai-training-results.md', 'src/ai/CHANGELOG.md', 'data/ai-heuristic.json', 'requirements-ai.txt',
+  'docs/ai-coach.md', 'data/ai-training-loop.json', 'scripts/train-loop.py', 'scripts/train-ai.ps1',
+  'scripts/analyze-position.py',
 ];
 for (const name of required) {
   if (!fs.existsSync(path.join(root, name))) {

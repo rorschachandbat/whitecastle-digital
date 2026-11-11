@@ -1,5 +1,12 @@
 # 工具脚本 CHANGELOG
 
+## 2026-11-11 — 持续训练与局面分析
+
+- 新增 `train-loop.py`，按完整对局保存、支持重启恢复、历史对手、攻略回归门槛、选模评估和存储上限。
+- 新增 `train-ai.ps1`，提供 Start/Stop/Status，路径相对脚本和输出目录可配置。
+- 新增 `analyze-position.py`，通过 JSON 行协议恢复本地存档并输出候选策略排序；策略权重不冒充胜率。
+- `evaluate-ai.py` 提供可复用的评估函数；`train-policy.py` 支持混合历史对手与逐局压缩经验保存。
+
 ## 2026-11-11 — AI 训练与评估
 
 - 新增 `ai-common.mjs`、`ai-env-server.mjs`，用本地 JSON 行协议把 Python 训练连接到 JS 规则环境。

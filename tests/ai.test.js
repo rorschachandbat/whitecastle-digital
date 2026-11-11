@@ -77,3 +77,42 @@ test('AI 显式限制决策步数并提供机器错误，不自动跳过或代�
   observation = env.step(chooseHeuristic(observation.heuristic));
   assert.throws(() => env.step(chooseHeuristic(observation.heuristic)), /AI_DECISION_LIMIT/);
 });
+
+test('AI v2 区分同层不同房间的家臣及放置骰点，不把公开不同局面压成同一编码', () => {
+  const env = environment();
+  let observation = env.reset('visible-details');
+  while (env.match.phase === 'draft') observation = env.step(chooseHeuristic(observation.heuristic));
+  const actor = env.actor;
+  env.match.state.players[actor].figures.courtier = [{ location: 'floor1', roomId: 'floor1-1' }];
+  const first = encodeState(env);
+  env.match.state.players[actor].figures.courtier[0].roomId = 'floor1-2';
+  assert.notDeepEqual(encodeState(env), first);
+  env.match.state.placements['castle:floor1-1'].dice = [{ color: 'coral', value: 2 }];
+  const second = encodeState(env);
+  env.match.state.placements['castle:floor1-1'].dice[0].value = 5;
+  assert.notDeepEqual(encodeState(env), second);
+  env.match.state.placements['castle:floor1-1'].dice[0] = { value: 5, sourceBridge: 'coral' };
+  const third = encodeState(env);
+  env.match.state.placements['castle:floor1-1'].dice[0].sourceBridge = 'black';
+  assert.notDeepEqual(encodeState(env), third);
+  const fourth = encodeState(env);
+  env.match.state.castleDecks.steward.reverse();
+  env.match.state.castleDecks.diplomat.reverse();
+  env.match.seed = 'private-seed-must-not-affect-network';
+  assert.deepEqual(encodeState(env), fourth);
+  assert.equal(observation.featureVersion, 'public-decisions-v2');
+});
+
+test('AI 存档分析从同一引擎恢复，拒绝其他配置的存档', () => {
+  const env = environment();
+  env.reset('analysis-restore');
+  while (env.match.actions.length === 0) env.step(chooseHeuristic(env.observe().heuristic));
+  const save = exportLocalMatch(env.match);
+  const expected = env.observe();
+  const restored = environment();
+  assert.deepEqual(restored.restore(save), expected);
+  const changed = structuredClone(save);
+  changed.catalog.cards[0].name = 'different-card-data';
+  assert.throws(() => restored.restore(changed), /AI_REPLAY_CONFIG_MISMATCH/);
+  assert.ok(expected.choices.every((choice) => !('next' in choice)));
+});

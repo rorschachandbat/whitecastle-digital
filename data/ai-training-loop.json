@@ -1,0 +1,16 @@
+{
+  "input": ".local/ai/guide-v4.jsonl.gz",
+  "initialCheckpoint": null,
+  "catalog": null,
+  "weights": null,
+  "prefix": "ai-loop-v2",
+  "epochs": 12,
+  "gamesPerGeneration": 32,
+  "evaluationPairs": 16,
+  "minimumPromotionPairs": 16,
+  "promotionWinRate": 0.6,
+  "guideRegressionTolerance": 0.05,
+  "historySize": 6,
+  "threads": 2,
+  "maxDiskGB": 4
+}

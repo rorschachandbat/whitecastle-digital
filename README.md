@@ -25,6 +25,7 @@
 - [规则核心与配置验收](docs/engine-core.md)：本批 API、数据隔离、已支持范围和验收步骤。
 - [本地两人试玩](docs/local-play.md)：启动、操作、配置导入、存档及练习限制。
 - [AI 训练实验](docs/ai-training.md)：攻略先验、深度学习、自我对弈、独立评估及恢复训练。
+- [持续训练与局面教练](docs/ai-coach.md)：持续自我对弈脚本、冠军晋级、新版编码、本地存档分析和网页适配路线。
 - [部署与依赖风险](docs/deployment.md)：GitHub Pages 与联机服务器的区别。
 - [项目 CHANGELOG](CHANGELOG.md)：按批次记录功能、规则修正、验证结果和已知限制。
 

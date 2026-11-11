@@ -1,4 +1,5 @@
-import { createLocalMatch, activeLocalPlayer, remainingRoundGardens } from '../engine/localMatch.js';
+import { createLocalMatch, importLocalMatch, activeLocalPlayer, remainingRoundGardens } from '../engine/localMatch.js';
+import { canonicalCatalog } from '../data/catalog.js';
 import { placementOptions, probeLocalAction, chooseActionOption } from '../engine/actionOptions.js';
 import { encodeState, encodeOption, FEATURE_VERSION } from './features.js';
 import { heuristicScore } from './heuristicPolicy.js';
@@ -15,7 +16,16 @@ export class TrainingEnvironment {
   }
 
   reset(seed, playOrder) {
-    this.match = createLocalMatch(this.catalog, { seed, ...(playOrder ? { playOrder } : {}) });
+    return this.initialize(createLocalMatch(this.catalog, { seed, ...(playOrder ? { playOrder } : {}) }));
+  }
+
+  restore(save) {
+    if (canonicalCatalog(save?.catalog) !== canonicalCatalog(this.catalog)) throw new Error('AI_REPLAY_CONFIG_MISMATCH');
+    return this.initialize(importLocalMatch(save));
+  }
+
+  initialize(match) {
+    this.match = match;
     this.pending = null;
     this.probe = null;
     this.orderPrefix = [];
@@ -113,6 +123,7 @@ export class TrainingEnvironment {
   observe() {
     if (this.match.phase === 'finished') return {
       done: true, score: this.match.state.score, decisions: this.decisions,
+      completedActions: this.match.actions.length,
       placements: this.match.actions.filter((action) => action.type === 'placeDie').length,
     };
     const options = this.getLegalActions();
@@ -123,6 +134,8 @@ export class TrainingEnvironment {
     return {
       done: false, actor: this.actor, state, candidates, heuristic,
       request: this.probe?.request?.type ?? 'root',
+      completedActions: this.match.actions.length,
+      choices: options.map(({ action, value, orderIndex }) => ({ action, value, orderIndex })),
       featureVersion: FEATURE_VERSION, actionModelVersion: ACTION_MODEL_VERSION,
     };
   }

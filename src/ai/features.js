@@ -1,7 +1,7 @@
 import { EFFECT_TYPES } from '../data/catalog.js';
 import { personalField } from '../engine/cardRules.js';
 
-export const FEATURE_VERSION = 'public-decisions-v1';
+export const FEATURE_VERSION = 'public-decisions-v2';
 export const COLORS = ['coral', 'black', 'white'];
 export const ASSETS = ['food', 'iron', 'pearl', 'coin', 'seal', 'points'];
 export const ROWS = ['courtier', 'gardener', 'warrior'];
@@ -29,7 +29,7 @@ function encodePlayer(match, player) {
   const current = cardOf(match, player?.currentCard ?? player?.currentCardId);
   return [...resources, ...figures, ...courtier, ...warriors, ...gardens,
     (player?.timePosition ?? 0) / 20,
-    ...effectsOf((player?.lanternCards ?? []).flatMap((id) => cardOf(match, id)?.back ?? [])),
+    ...effectsOf((player?.lanternCards ?? player?.lanternCardIds ?? []).flatMap((id) => cardOf(match, id)?.back ?? [])),
     ...ROWS.flatMap((row) => fieldOf(current ? personalField(current, row) : undefined))];
 }
 
@@ -39,7 +39,8 @@ export function encodeState(env) {
   const actor = env.actor;
   const state = probe?.request?.state ?? match.state;
   const player = probe?.request?.player ?? state?.players?.[actor] ?? match.draft.players[actor];
-  const opponent = state?.players?.[actor === '0' ? '1' : '0'];
+  const other = actor === '0' ? '1' : '0';
+  const opponent = state?.players?.[other] ?? match.draft.players[other];
   const values = [
     ...oneHot(['draft', 'playing', 'round-gardens', 'finished'], match.phase),
     (state?.round ?? 0) / 3,
@@ -91,6 +92,61 @@ export function encodeState(env) {
     ...oneHot(['castle', 'outside', 'personal', 'well'], env.pending?.target?.area),
     ...oneHot(ROWS, env.pending?.target?.row),
     ...Array.from({ length: 20 }, (_, index) => ((env.orderPrefix ?? [])[index] ?? -1) / 20));
+  // 增补公开细节；不读取剩余牌堆的身份或顺序，也不读取随机数状态。
+  for (const owner of [actor, other]) {
+    const person = owner === actor ? player : opponent;
+    values.push(Number((person?.timePriority ?? 0) > (owner === actor ? opponent?.timePriority ?? 0 : player?.timePriority ?? 0)),
+      ...[0, 1].map((rank) => Number(person?.finalOrder === rank)));
+    for (let index = 0; index < 5; index += 1) {
+      const figure = person?.figures?.courtier?.[index];
+      values.push(Number(Boolean(figure)),
+        ...oneHot(['gate', 'floor1', 'floor2', 'floor3'], figure?.location),
+        ...oneHot(ROOMS, figure?.roomId),
+        ...[0, 1, 2].map((slot) => Number(figure?.slotId === top?.fields?.[slot]?.id && Boolean(figure))));
+    }
+    for (const rowId of ROWS) {
+      const row = match.config.personalDomainRows.find((item) => item.id === rowId);
+      const count = person?.figures?.[row?.figureType]?.length ?? 0;
+      values.push(...effectsOf(person ? [row.baseGain, ...row.revealedGains.slice(0, count)] : []));
+    }
+    for (const garden of match.config.setup.gardens) {
+      values.push(Number(Boolean(match.roundGardens?.remaining?.[owner]?.includes(garden.cardId))));
+    }
+  }
+  const places = [...ROOMS.map((id) => `castle:${id}`), 'outside:left', 'outside:right', 'well',
+    ...[actor, other].flatMap((owner) => ROWS.map((row) => `personal:${owner}:${row}`))];
+  for (const id of places) {
+    const place = state?.placements?.[id];
+    values.push((place?.comparisonValue ?? match.config.setup.placements[id]?.comparisonValue ?? 0) / 6,
+      (place?.dice.length ?? 0) / 9);
+    // 非水井格至多一骰；水井没有比较骰覆盖，数量足以表达占用。
+    if (id !== 'well') {
+      const die = place?.dice[0];
+      values.push((die?.value ?? 0) / 6, ...oneHot(COLORS,
+        state?.bridges?.find((bridge) => bridge.id === die?.sourceBridge)?.color ?? die?.color));
+    }
+  }
+  for (const pair of match.draft.pairs) {
+    const resource = cardOf(match, pair.resourceId);
+    const action = cardOf(match, pair.actionId);
+    values.push(Number(pair.chosenBy === null), Number(pair.chosenBy === actor), Number(pair.chosenBy === other),
+      ...effectsOf(resource?.initialGains), ...effectsOf(resource?.back),
+      ...effectsOf(cardOf(match, resource?.grantDecreeId)?.back),
+      ...ROWS.flatMap((row) => fieldOf(action ? personalField(action, row) : undefined)));
+  }
+  values.push((state?.castleDecks?.steward?.length ?? match.config.setup.castleDecks.steward.length) / 9,
+    (state?.castleDecks?.diplomat?.length ?? match.config.setup.castleDecks.diplomat.length) / 9,
+    ...oneHot(ROOMS, env.pending?.target?.id));
+  for (let index = 0; index < 20; index += 1) {
+    values.push(...effectsOf(probe?.request?.effects?.[index] ? [probe.request.effects[index]] : []),
+      Number((env.orderPrefix ?? []).includes(index)));
+  }
+  for (let index = 0; index < 3; index += 1) {
+    const slot = top?.fields[index]?.id;
+    const occupied = state?.topSlots?.[slot];
+    values.push(Number(Boolean(occupied)), Number(occupied?.actor === actor),
+      Number(occupied?.actor === other));
+  }
   return values;
 }
 
@@ -130,6 +186,8 @@ export function encodeOption(env, option) {
     if (current && row) fields.push(personalField(current, row));
   }
   const orderedEffects = option.orderIndex === undefined ? [] : [probe.request.effects[option.orderIndex]];
+  const promoted = (probe?.request?.player ?? match.state?.players[env.actor])
+    ?.figures?.courtier?.[object.promote?.figureIndex];
   return [
     ...oneHot(['chooseStartingPair', 'placeDie', 'roundGarden', 'exchangeSeal'], action?.type),
     ...oneHot(REQUESTS, object.type ?? probe?.request?.type),
@@ -149,5 +207,10 @@ export function encodeOption(env, option) {
         : object.fieldIds ? card?.fields.find((field) => field.id === object.fieldIds[index])?.effects : [])),
     ...Array.from({ length: 3 }, (_, index) =>
       ((probe?.request?.fields ?? []).findIndex((field) => field.id === object.fieldIds?.[index]) + 1) / 3),
+    ...match.config.setup.gardens.map((item) => Number(item.cardId === (action?.cardId ?? object.cardId))),
+    ...match.config.setup.trainingYards.map((item) => Number(item.id === object.yardId)),
+    ...oneHot(['gate', 'floor1', 'floor2', 'floor3'], promoted?.location),
+    ...oneHot(ROOMS, promoted?.roomId),
+    ...effectsOf(card?.back), ...oneHot(['top', 'middle', 'bottom', 'upper', 'lower'], object.fieldId ?? object.promote?.fieldId),
   ];
 }

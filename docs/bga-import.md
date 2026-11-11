@@ -49,6 +49,8 @@
 
 用户后续告知取得BGA同意，现有独立[玩家回放原始库采集器](bga-crawl.md)，能保存服务端初始局面及结构化通知包。其 `whitecastle-bga-raw-replay` 格式与本页的DOM观察档案不同；采集成功仍不代表动作链已映射、可续玩或可训练。
 
+现已另外实现[起始选牌训练工作流](bga-training-workflow.md)：从原始回放提取无撤销的完整选牌段，通过本地合法候选、资源和灯笼牌对账后做策略微调。它不改变本页DOM档案的不可执行状态，也没有实现完整三轮动作转换。
+
 ## 使用
 
 读取器 [bgaDom.js](../src/integrations/bgaDom.js) 导出 `captureBgaDocument(root)`，由已授权浏览器在回放iframe的body上只读调用。读取结果需等当前动作的资源计数、棋子动画和标题稳定后保存，游标改变本身不代表动画结束。

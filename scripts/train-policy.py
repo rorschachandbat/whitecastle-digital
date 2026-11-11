@@ -17,11 +17,18 @@ from ai_model import (ROOT, META_KEYS, PolicyValue, RulesProcess, batch_tensors,
                       infer, save_checkpoint, load_checkpoint)
 
 
-def load_dataset(path):
+def load_dataset(path, allow_partial=False):
     manifest_path = Path(str(path) + ".report.json")
     if not manifest_path.exists():
         raise ValueError("AI_DATA_INCOMPLETE_MANIFEST")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    partial = manifest.get("datasetFormat") == "bga-verified-draft-v1"
+    if partial and not allow_partial:
+        raise ValueError("AI_PARTIAL_DATA_USE_BGA_TRAINER")
+    if partial:
+        if (manifest.get("scope") != "starting-draft-only" or manifest.get("policyOnly") is not True
+                or hashlib.sha256(Path(path).read_bytes()).hexdigest() != manifest.get("datasetSha256")):
+            raise ValueError("AI_BGA_MANIFEST_MISMATCH")
     if manifest["games"] != manifest["completed"]:
         raise ValueError("AI_DATA_INCOMPLETE_GAMES")
     opener = gzip.open if str(path).endswith(".gz") else open
@@ -41,8 +48,14 @@ def load_dataset(path):
             raise ValueError("AI_MIXED_DATA_VERSIONS")
         if len(row["state"]) != dimensions[0] or not row["candidates"]:
             raise ValueError("AI_BAD_STATE")
-        if not 0 <= row["teacher"] < len(row["candidates"]) or row["z"] not in (-1, 1):
+        if not 0 <= row["teacher"] < len(row["candidates"]) or row["z"] not in ((0,) if partial else (-1, 1)):
             raise ValueError("AI_BAD_TARGET")
+        if partial and (row.get("valueWeight") != 0
+                        or row.get("provenance", {}).get("kind") != "bga-verified-draft-v1"
+                        or row["provenance"].get("legalityVerified") is not True
+                        or row["provenance"].get("resourcesVerified") is not True
+                        or row["game"] != "bga:" + row["provenance"].get("table", "")):
+            raise ValueError("AI_BGA_UNVERIFIED_ROW")
         flat = row["state"] + [value for option in row["candidates"] for value in option]
         if any(len(option) != dimensions[1] for option in row["candidates"]) or not all(map(math.isfinite, flat)):
             raise ValueError("AI_BAD_FEATURES")

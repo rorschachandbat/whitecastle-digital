@@ -19,6 +19,7 @@ import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
 from html.parser import HTMLParser
+from html import unescape
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,20 @@ class CrawlError(Exception):
 
 class AuthenticationError(CrawlError):
     pass
+
+
+class ReplayLimitError(CrawlError):
+    pass
+
+
+def replay_limit_response(body):
+    """仅识别BGA回放额度错误，不保留或回显服务器正文。"""
+    text = body.decode("utf-8", errors="replace")
+    text = re.sub(r"<(?:script|style)\b[^>]*>.*?</(?:script|style)>", "", text,
+                  flags=re.DOTALL | re.IGNORECASE)
+    text = unescape(re.sub(r"<[^>]+>", " ", text))
+    return bool(re.search(r"(?:达到上限|達到上限|reached.{0,60}limit|limit.{0,60}reached)"
+                          r"\s*[（(]\s*replay\s*[)）]", text, re.IGNORECASE))
 
 
 def timestamp():
@@ -128,6 +143,18 @@ class Client:
                             raise CrawlError("BGA_RESPONSE_TOO_LARGE")
                     return body.decode("utf-8-sig")
             except urllib.error.HTTPError as error:
+                if error.code == 500 and urllib.parse.urlsplit(url).path.startswith("/archive/"):
+                    body = error.read(128 * 1024)
+                    if error.headers.get("Content-Encoding", "").lower() == "gzip":
+                        try:
+                            with gzip.GzipFile(fileobj=io.BytesIO(body)) as compressed:
+                                body = compressed.read(128 * 1024)
+                        except (OSError, EOFError):
+                            body = b""
+                    if replay_limit_response(body):
+                        error.close()
+                        self.stop.set()
+                        raise ReplayLimitError("BGA_REPLAY_LIMIT_RETRY_LATER") from None
                 error.close()
                 if error.code in (401, 403):
                     self.stop.set()
@@ -339,6 +366,7 @@ def discover(client, folder, manifest, save, max_pages):
     discovery = manifest["discovery"]
     if discovery["complete"]:
         return
+    seen_pages = set()
     for _ in range(max_pages):
         if (folder / "STOP").exists():
             raise InterruptedError("BGA_STOP_REQUESTED")
@@ -350,6 +378,10 @@ def discover(client, folder, manifest, save, max_pages):
         tables = data.get("tables")
         if not isinstance(tables, list):
             raise CrawlError("BGA_HISTORY_TABLES_MISSING")
+        signature = tuple(str(table.get("table_id")) for table in tables)
+        if tables and signature in seen_pages:
+            raise CrawlError("BGA_HISTORY_REPEATED_PAGE")
+        seen_pages.add(signature)
         atomic_json(folder / "history" / f"page-{page:05d}.json", data)
         if page == 1:
             discovery["reportedPlayed"] = data.get("stats", {}).get("general", {}).get("played")
@@ -372,8 +404,6 @@ def discover(client, folder, manifest, save, max_pages):
               flush=True)
         if not tables:
             return
-        if added == 0:
-            raise CrawlError("BGA_HISTORY_REPEATED_PAGE")
     raise CrawlError("BGA_HISTORY_PAGE_LIMIT")
 
 
@@ -387,6 +417,7 @@ def main():
     parser.add_argument("--max-pages", type=int, default=2000)
     parser.add_argument("--limit", type=int, default=0, help="本次最多下载局数；0表示所有已发现对局")
     parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument("--refresh-history", action="store_true")
     parser.add_argument("--status", action="store_true")
     args = parser.parse_args()
     if (not args.player.isdigit() or not 1 <= args.workers <= 4
@@ -424,6 +455,10 @@ def main():
     }
     if manifest["player"] != args.player or manifest["gameId"] != GAME_ID:
         raise CrawlError("BGA_CRAWL_CONFIG_MISMATCH")
+    if args.refresh_history:
+        # 重新分页只更新发现游标，已保存的对局和哈希继续保留并按桌号去重。
+        manifest["endDate"] = int(time.time())
+        manifest["discovery"] = {"nextPage": 1, "complete": False}
     client = Client(args.cookie_file, args.interval)
     signal.signal(signal.SIGINT, lambda *_: client.stop.set())
     signal.signal(signal.SIGTERM, lambda *_: client.stop.set())
@@ -458,6 +493,7 @@ def main():
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
             futures = {}
             iterator = iter(pending)
+            service_failures = 0
 
             def submit():
                 if client.stop.is_set() or (folder / "STOP").exists():
@@ -482,13 +518,22 @@ def main():
                     try:
                         record.update(future.result())
                         record.pop("error", None)
+                        service_failures = 0
                     except AuthenticationError as error:
+                        client.stop.set()
+                        manifest["error"] = str(error)
+                    except ReplayLimitError as error:
                         client.stop.set()
                         manifest["error"] = str(error)
                     except InterruptedError:
                         pass
                     except CrawlError as error:
                         record.update(status="failed", error=str(error), updatedAt=timestamp())
+                        service_failures = service_failures + 1 if re.fullmatch(
+                            r"BGA_HTTP_5\d\d|BGA_NETWORK_FAILED", str(error)) else 0
+                        if service_failures >= 5:
+                            client.stop.set()
+                            manifest["error"] = "BGA_SERVICE_UNAVAILABLE_RETRY_LATER"
                     except Exception:
                         client.stop.set()
                         manifest["error"] = "BGA_UNEXPECTED_FAILURE"

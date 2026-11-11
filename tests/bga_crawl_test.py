@@ -1,9 +1,13 @@
 """验证原始回放解析、身份隔离、断点校验和凭据请求边界；不访问网络。"""
 import gzip
+import contextlib
+import io
 import importlib.util
 import json
 import tempfile
+import threading
 import unittest
+from unittest.mock import patch
 import urllib.error
 from pathlib import Path
 
@@ -157,6 +161,27 @@ class ReplayTests(unittest.TestCase):
                 client.request("/gamestats")
             self.assertTrue(client.stop.is_set())
 
+    def test_replay_quota_stops_without_retry_or_logging_body(self):
+        class Opener:
+            calls = 0
+
+            def open(self, request, **_):
+                self.calls += 1
+                body = gzip.compress('<html>你已经达到上限（replay）</html>'.encode())
+                raise urllib.error.HTTPError(request.full_url, 500, "server",
+                                             {"Content-Encoding": "gzip"}, io.BytesIO(body))
+
+        with tempfile.TemporaryDirectory() as directory:
+            cookie = Path(directory) / "cookie.txt"
+            cookie.write_text("fake-session=fake-secret", encoding="utf-8")
+            client = CRAWL.Client(cookie, interval=0)
+            client.opener = Opener()
+            with self.assertRaisesRegex(CRAWL.ReplayLimitError, "^BGA_REPLAY_LIMIT_RETRY_LATER$"):
+                client.request("/archive/archive/frame.html")
+            self.assertEqual(client.opener.calls, 1)
+            self.assertTrue(client.stop.is_set())
+        self.assertFalse(CRAWL.replay_limit_response(b"<script>reached limit (replay)</script>unexpected"))
+
     def test_discovery_keeps_all_outcomes_and_stops_on_empty_page(self):
         class FakeClient:
             def api(self, route, params):
@@ -171,6 +196,54 @@ class ReplayTests(unittest.TestCase):
             CRAWL.discover(FakeClient(), Path(directory), manifest, lambda: None, 3)
             self.assertTrue(manifest["discovery"]["complete"])
             self.assertEqual(manifest["tables"]["123"]["history"]["concede"], 1)
+
+    def test_refresh_accepts_pages_with_only_previously_known_tables(self):
+        class FakeClient:
+            def api(self, route, params):
+                if params["page"] > 1:
+                    return {"tables": []}
+                return {"tables": [{"table_id": "123", "game_id": 2242, "players": "456,789"}]}
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = {"player": "456", "endDate": 1,
+                        "tables": {"123": {"status": "downloaded", "history": {"old": True}}},
+                        "discovery": {"nextPage": 1, "complete": False}}
+            CRAWL.discover(FakeClient(), Path(directory), manifest, lambda: None, 3)
+            self.assertTrue(manifest["discovery"]["complete"])
+            self.assertEqual(manifest["tables"]["123"]["status"], "downloaded")
+
+    def test_identical_repeated_history_page_is_rejected(self):
+        class FakeClient:
+            def api(self, route, params):
+                return {"tables": [{"table_id": "123", "game_id": 2242, "players": "456,789"}]}
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = {"player": "456", "endDate": 1, "tables": {},
+                        "discovery": {"nextPage": 1, "complete": False}}
+            with self.assertRaisesRegex(CRAWL.CrawlError, "REPEATED_PAGE"):
+                CRAWL.discover(FakeClient(), Path(directory), manifest, lambda: None, 3)
+
+    def test_five_service_failures_stop_before_remaining_tables(self):
+        class FakeClient:
+            def __init__(self, *_):
+                self.stop = threading.Event()
+
+            def bootstrap(self, _):
+                pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            manifest = {"format": "whitecastle-bga-crawl", "version": 1, "player": "456",
+                        "gameId": 2242, "endDate": 1, "discovery": {"complete": True},
+                        "tables": {str(i): {"history": {}, "status": "pending"} for i in range(10)}}
+            CRAWL.atomic_json(folder / "manifest.json", manifest)
+            arguments = ["crawl-bga.py", "--player", "456", "--out-dir", directory, "--workers", "1"]
+            with patch("sys.argv", arguments), patch.object(CRAWL, "Client", FakeClient), patch.object(
+                    CRAWL, "fetch_archive", side_effect=CRAWL.CrawlError("BGA_HTTP_500")), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(CRAWL.main(), 1)
+            result = CRAWL.load_json(folder / "manifest.json")
+            self.assertEqual(result["summary"], {"failed": 5, "pending": 5})
+            self.assertEqual(result["error"], "BGA_SERVICE_UNAVAILABLE_RETRY_LATER")
 
 
 if __name__ == "__main__":

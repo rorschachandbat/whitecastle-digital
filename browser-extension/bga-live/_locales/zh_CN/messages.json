@@ -1,0 +1,4 @@
+{
+  "appName": { "message": "姬路城 · 盘面读取" },
+  "description": { "message": "手动启动后读取当前BGA姬路城盘面，传给本机查看工具。" }
+}

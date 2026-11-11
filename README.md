@@ -26,6 +26,7 @@
 - [本地两人试玩](docs/local-play.md)：启动、操作、配置导入、存档及练习限制。
 - [AI 训练实验](docs/ai-training.md)：攻略先验、深度学习、自我对弈、独立评估及恢复训练。
 - [持续训练与局面教练](docs/ai-coach.md)：持续自我对弈脚本、冠军晋级、新版编码、本地存档分析和网页适配路线。
+- [BGA实时盘面侧栏](docs/bga-live.md)：一键打开、浏览器扩展配对、盘面同步及实际对局验收。
 - [部署与依赖风险](docs/deployment.md)：GitHub Pages 与联机服务器的区别。
 - [项目 CHANGELOG](CHANGELOG.md)：按批次记录功能、规则修正、验证结果和已知限制。
 

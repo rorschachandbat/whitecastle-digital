@@ -1,0 +1,8 @@
+body { width: 340px; margin: 0; background: #f2efe7; color: #253c35; font: 14px/1.6 system-ui, sans-serif; }
+main { padding: 20px; }
+h1 { font-size: 20px; }
+label, input, button, a { display: block; box-sizing: border-box; width: 100%; margin: 10px 0; }
+input { padding: 9px; border: 1px solid #aeb9b0; }
+button { padding: 10px; border: 0; border-radius: 4px; background: #315b4e; color: white; cursor: pointer; }
+a { color: #315b4e; }
+p { overflow-wrap: anywhere; }

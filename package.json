@@ -13,6 +13,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "config": "node scripts/serve-config.mjs",
     "play": "node scripts/serve-play.mjs",
+    "bga:live": "node scripts/serve-bga-live.mjs",
     "test": "node --test",
     "check": "node scripts/check-project.mjs"
   },

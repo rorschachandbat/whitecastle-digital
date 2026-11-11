@@ -30,13 +30,16 @@ function colorKey(value) {
  * 导入观察档案，不伪造可操作引擎存档。后续日志只在 history 中保留，
  * publicPosition 只来自选定游标的 DOM，未知牌背不会借助终局信息补正面。
  */
-export function importBgaObservation(observation, { catalog, mapping, source, seatMap }) {
+export function importBgaObservation(observation, { catalog, mapping, source, seatMap, mode = 'replay' }) {
   if (mapping?.format !== 'whitecastle-bga-mapping' || mapping.version !== 1
     || validateCatalog(catalog).length || catalog.revision !== mapping.catalogRevision) fail('BGA_CATALOG_MISMATCH');
   if (mapping.gameAssetVersion !== source?.gameAssetVersion) fail('BGA_ASSET_VERSION_MISMATCH');
-  if (observation?.format !== 'whitecastle-bga-observation' || observation.version !== 1
-    || !Number.isSafeInteger(observation.cursor) || observation.cursor < 1
-    || !Number.isInteger(observation.progress) || observation.progress < 0 || observation.progress > 100
+  const validCursor = Number.isSafeInteger(observation?.cursor) && observation.cursor >= 1;
+  const validProgress = Number.isInteger(observation?.progress) && observation.progress >= 0 && observation.progress <= 100;
+  if (!['replay', 'live'].includes(mode)
+    || observation?.format !== 'whitecastle-bga-observation' || observation.version !== 1
+    || !(validCursor || (mode === 'live' && observation.cursor === null))
+    || !(validProgress || (mode === 'live' && observation.progress === null))
     || !Array.isArray(observation.players) || observation.players.length !== 2
     || new Set(observation.players.map((player) => player.id)).size !== 2
     || !['cards', 'tiles', 'pieces', 'dice', 'decks'].every((key) => Array.isArray(observation[key]))

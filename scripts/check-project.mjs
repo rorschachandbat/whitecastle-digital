@@ -21,6 +21,9 @@ const required = [
   'scripts/analyze-position.py',
   'docs/bga-import.md', 'data/bga-mapping.json', 'bga-replay.html',
   'src/integrations/bgaDom.js', 'src/integrations/bgaReplay.js', 'src/integrations/CHANGELOG.md',
+  'bga-live.html', 'src/ui/bgaLive.js', 'src/ui/bgaLive.css', 'src/integrations/bgaLive.js',
+  'scripts/serve-bga-live.mjs', 'scripts/bga-live.ps1', 'docs/bga-live.md',
+  'browser-extension/bga-live/manifest.json', 'browser-extension/bga-live/capture.js',
 ];
 for (const name of required) {
   if (!fs.existsSync(path.join(root, name))) {
@@ -37,6 +40,9 @@ const sourceFiles = [
   'scripts/ai-common.mjs', 'scripts/ai-env-server.mjs', 'scripts/generate-training-data.mjs',
   'src/ui/bgaReplay.js', 'src/integrations/bgaDom.js', 'src/integrations/bgaReplay.js',
   'scripts/import-bga-replay.mjs',
+  'src/integrations/bgaLive.js', 'src/ui/bgaLive.js', 'scripts/serve-bga-live.mjs',
+  ...['capture.js', 'background.js', 'watcher.js', 'popup.js', 'StringTable.js']
+    .map((name) => `browser-extension/bga-live/${name}`),
 ];
 const source = sourceFiles
   .filter((name) => name === 'src/main.js' || name.startsWith('src/ui/'))
@@ -46,11 +52,24 @@ const keys = [...source.matchAll(/(?:text|element)\(\s*['"]([^'"]+)['"]/g)]
   .filter((match) => match[0].startsWith('text'))
   .map((match) => match[1]);
 // 页面文案有些以数组形式传递，额外检查全部已声明的文案键。
-for (const match of source.matchAll(/['"]((?:bga|app|status|framework|rules|guide|plan|workflow|changelog|roadmap|footer|editor|play)\.[A-Za-z0-9_.]+)['"]/g)) {
+for (const match of source.matchAll(/['"]((?:live|bga|app|status|framework|rules|guide|plan|workflow|changelog|roadmap|footer|editor|play)\.[A-Za-z0-9_.]+)['"]/g)) {
   keys.push(match[1]);
 }
 for (const key of keys) {
   if (!(key in StringTable)) throw new Error(`缺少 StringTable 键：${key}`);
+}
+
+// 扩展独立安装，使用自己的StringTable，并核对其引用键与Chrome清单本地化。
+const extensionTable = await import('../browser-extension/bga-live/StringTable.js');
+const popupSource = fs.readFileSync(path.join(root, 'browser-extension/bga-live/popup.js'), 'utf8');
+for (const match of popupSource.matchAll(/text\(['"]([^'"]+)['"]/g)) {
+  if (!(match[1] in extensionTable.StringTable)) throw new Error(`扩展文案键不存在：${match[1]}`);
+}
+const extensionManifest = JSON.parse(fs.readFileSync(path.join(root, 'browser-extension/bga-live/manifest.json'), 'utf8'));
+const extensionMessages = JSON.parse(fs.readFileSync(path.join(root, 'browser-extension/bga-live/_locales/zh_CN/messages.json'), 'utf8'));
+for (const key of ['name', 'description']) {
+  const messageKey = /^__MSG_(\w+)__$/.exec(extensionManifest[key])?.[1];
+  if (!messageKey || !extensionMessages[messageKey]?.message) throw new Error(`扩展清单缺少本地化：${key}`);
 }
 
 for (const file of sourceFiles) {

@@ -1,0 +1,48 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, "Microsoft YaHei", sans-serif;
+  color: #25322f;
+  background: #f0ede5;
+  font-synthesis: none;
+  line-height: 1.65;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1200px; margin: auto; padding: 60px 28px 24px; }
+.hero { max-width: 850px; padding-bottom: 28px; border-bottom: 1px solid #cfcbbc; }
+.eyebrow { font-size: 12px; letter-spacing: .15em; color: #6f6551; font-weight: 700; }
+h1, h2 { font-family: "Noto Serif SC", "Songti SC", SimSun, serif; }
+h1 { font-size: clamp(32px, 5vw, 62px); letter-spacing: .02em; margin: 16px 0; line-height: 1.25; }
+h2 { font-size: 23px; margin: 0 0 16px; }
+h3 { font-size: 14px; margin-top: 26px; }
+p { margin: 10px 0; }
+.tagline { font-size: 21px; }
+.intro, .muted { color: #696e64; }
+.status { margin: 32px 0; padding: 26px 30px; border-left: 4px solid #a77446; background: #e8e1d3; }
+.status h2 { margin: 8px 0; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.panel { background: #faf8f2; border: 1px solid #d6d2c6; padding: 28px; border-radius: 4px; }
+.connection { color: #34634f; font-weight: 650; }
+.state { background: #233430; color: #ebeadb; padding: 20px; border-radius: 3px; overflow: auto; font-size: 12px; }
+button { border: 0; border-radius: 3px; background: #31564b; color: #fff; font: inherit; padding: 10px 20px; cursor: pointer; }
+button:hover { background: #244339; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+a { color: #325d50; text-underline-offset: 4px; }
+a:hover { color: #935b2b; }
+.doc-list { display: grid; gap: 14px; margin-top: 28px; }
+.doc-list a { padding-bottom: 12px; border-bottom: 1px solid #ddd8ca; }
+.roadmap { margin-top: 24px; }
+.roadmap ol { padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; list-style: none; }
+.roadmap li { border-top: 2px solid #a8997c; padding-top: 12px; font-size: 14px; }
+.document-panel { margin: 44px 0; scroll-margin-top: 24px; }
+.document { white-space: pre-wrap; overflow-wrap: anywhere; background: #faf8f2; padding: 26px; border: 1px solid #d6d2c6; font-family: inherit; font-size: 14px; max-height: 650px; overflow: auto; }
+footer { border-top: 1px solid #cfcbbc; padding-top: 20px; color: #6e7166; font-size: 12px; }
+:focus-visible { outline: 3px solid #b57336; outline-offset: 4px; }
+
+@media (max-width: 760px) {
+  main { padding: 28px 16px 24px; }
+  .grid { grid-template-columns: 1fr; }
+  .panel, .status { padding: 22px; }
+  .roadmap ol { grid-template-columns: 1fr 1fr; }
+}

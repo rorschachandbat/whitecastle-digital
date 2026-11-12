@@ -98,16 +98,17 @@ details > summary { padding: 5px 0; }
 .side-tray { position:sticky; top:16px; border:1px solid #c6cfbc; background:#fffdf5; border-radius:8px; padding:18px; box-shadow:0 5px 18px #223c3210; max-height:calc(100vh - 32px); overflow:auto; }
 .side-tray h2 { font-size:18px; margin:0 0 10px; }
 .resource-sticky { position:sticky; top:0; z-index:1; background:#fffdf5; padding-bottom:8px; }
-.action-drawer summary { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
-.action-drawer summary small { font-weight:400; }
 .resource-card { border:1px solid #ddd6c2; border-left:4px solid #bc7b55; border-radius:6px; padding:10px 12px; margin:0 0 10px; background:#faf7ef; }
 .resource-card.p1 { border-left-color:#7899a8; }
 .resource-card.active { box-shadow:0 0 0 2px #b8c4aa; }
 .resource-card h3 { margin:0; }
 .resource-card .resources { grid-template-columns:repeat(3,1fr); }
-.action-drawer { margin:18px 0; border:1px solid #c6cfbc; border-radius:8px; background:#fffdf5; padding:8px 16px 12px; }
-.action-drawer summary { font-weight:750; display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
-.action-drawer summary small { font-weight:400; }
+.action-panel { border-top:1px solid #e0dfd0; margin:8px 0 18px; padding-top:14px; }
+.action-panel p { font-size:12px; }
+.action-panel .resources { grid-template-columns:repeat(3,1fr); }
+.action-panel .toolbar { margin-top:15px; }
+.action-panel .toolbar button { font-size:11px; }
+.action-panel .choice { text-align:left; font-size:12px; display:block; width:100%; }
 .action-tray { position:static; top:auto; border:1px solid #c6cfbc; background:#fffdf5; border-radius:8px; padding:22px; box-shadow:0 5px 18px #223c3210; max-height:calc(100vh - 32px); overflow:auto; }
 .action-tray h3 { margin-top:18px; }
 .action-tray p { font-size:12px; }

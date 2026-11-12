@@ -712,6 +712,9 @@ function resourceColumn() {
     resources.append(card);
   }
   aside.append(resources);
+  const actionPanel = el('section', null, 'action-panel');
+  actionPanel.append(el('h2', text('play.actionTitle')), wizardView());
+  aside.append(actionPanel);
   if (session.match.phase === 'draft') {
     aside.append(button(text(layoutReviewed ? 'play.layout.choose' : 'play.layout.back'), () => {
       document.getElementById(layoutReviewed ? 'starting-draft' : 'layout-preview')?.scrollIntoView({ block: 'start' });
@@ -791,17 +794,6 @@ function wizardView() {
   const help = el('p', text('play.testGuide'), 'test-guide');
   aside.append(help);
   return aside;
-}
-function actionDrawer() {
-  const details = el('details', null, 'action-drawer');
-  const choosing = Boolean(probe) || session.match.phase === 'round-gardens';
-  details.open = choosing;
-  const summary = el('summary');
-  summary.append(el('span', text('play.actionTitle')), el('small', text('play.actionFold'), 'muted'));
-  details.append(summary);
-  details.append(wizardView());
-  if (choosing) queueMicrotask(() => details.scrollIntoView({ block: 'nearest' }));
-  return details;
 }
 function scoreView() {
   const result = session.match.state.score;
@@ -884,7 +876,7 @@ function render() {
     board.append(castleView(), bridgesView(), yardsView(), playersView());
   }
   layout.append(board, resourceColumn());
-  root.append(layout, actionDrawer(), logView(), el('footer', text('play.autosaved')));
+  root.append(layout, logView(), el('footer', text('play.autosaved')));
   if (focusDraft && layoutReviewed) {
     focusDraft = false;
     queueMicrotask(() => document.getElementById('starting-draft')?.scrollIntoView({ block: 'start' }));

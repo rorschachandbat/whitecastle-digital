@@ -30,6 +30,15 @@ function shuffled(values, random) {
   return result;
 }
 
+/** 房间至少两种骰色。两格必须不同色；三格可以有两格同色，但不能三格同色。 */
+function roomTileColors(count, random) {
+  let colors;
+  do {
+    colors = Array.from({ length: count }, () => COLORS[Math.floor(random() * COLORS.length)]);
+  } while (new Set(colors).size < 2);
+  return colors;
+}
+
 function cardsOf(config, kind) {
   return config.cards.filter((card) => card.kind === kind && card.verification === 'confirmed'
     && (!card.playerCounts || card.playerCounts.includes(2)));
@@ -98,20 +107,25 @@ function positionConfig(catalog, options) {
     if (attempts > 100) fail('DATA_UNVERIFIED');
   } while (new Set([...stewards.slice(0, 3), ...diplomats.slice(0, 2)].map(darkAction)).size < 2);
   if (stewards.length < 3 || diplomats.length < 2) fail('INSUFFICIENT_CARDS');
-  const colors = shuffled(COLORS, random);
   const castleRooms = [
-    ...stewards.slice(0, 3).map((card, index) => ({
-      id: `floor1-${index + 1}`, floor: 1, cardId: card.id,
-      tiles: ['top', 'middle', 'bottom'].map((fieldId, fieldIndex) => ({
-        fieldId, color: colors[(index + fieldIndex) % 3],
-      })),
-    })),
-    ...diplomats.slice(0, 2).map((card, index) => ({
-      id: `floor2-${index + 1}`, floor: 2, cardId: card.id,
-      tiles: ['upper', 'lower'].map((fieldId, fieldIndex) => ({
-        fieldId, color: colors[(index + fieldIndex) % 3],
-      })),
-    })),
+    ...stewards.slice(0, 3).map((card, index) => {
+      const tileColors = roomTileColors(3, random);
+      return {
+        id: `floor1-${index + 1}`, floor: 1, cardId: card.id,
+        tiles: ['top', 'middle', 'bottom'].map((fieldId, colorIndex) => ({
+          fieldId, color: tileColors[colorIndex],
+        })),
+      };
+    }),
+    ...diplomats.slice(0, 2).map((card, index) => {
+      const tileColors = roomTileColors(2, random);
+      return {
+        id: `floor2-${index + 1}`, floor: 2, cardId: card.id,
+        tiles: ['upper', 'lower'].map((fieldId, colorIndex) => ({
+          fieldId, color: tileColors[colorIndex],
+        })),
+      };
+    }),
   ];
   const gardens = ['plant', 'stone'].flatMap((kind) => {
     const cards = shuffled(cardsOf(config, kind), random);

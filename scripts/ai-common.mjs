@@ -24,6 +24,7 @@ export function loadTrainingConfig(catalogPath, weightsPath) {
   return {
     catalog, weights,
     meta: { profile: LOCAL_PROFILE_ID, featureVersion: FEATURE_VERSION, actionModelVersion: ACTION_MODEL_VERSION,
+      setupVersion: 'room-colors-v2',
       catalogHash: digest(catalog), heuristicHash: digest(weights),
       encoderHash: createHash('sha256').update(fs.readFileSync(path.join(projectRoot, 'src/ai/features.js')))
         .update(fs.readFileSync(path.join(projectRoot, 'src/ai/environment.js'))).digest('hex') },

@@ -64,6 +64,7 @@ test('R-SETUP-01/02/03：两人开局九骰、五房间与补牌堆、六花园�
   assert.equal(match.config.setup.gardens.length, 6);
   assert.equal(new Set(match.config.setup.gardens.map((garden) => garden.cardId)).size, 6);
   assert.ok(rooms.every((room) => new Set(room.tiles.map((tile) => tile.color)).size >= 2));
+
   assert.equal(match.config.setup.trainingMode, 'separate-pools');
   const yards = match.config.setup.trainingYards;
   const allFaces = yards.flatMap((yard) => yard.faceIds);
@@ -71,6 +72,21 @@ test('R-SETUP-01/02/03：两人开局九骰、五房间与补牌堆、六花园�
   assert.equal(new Set(allFaces).size, 4);
   assert.equal(allFaces.filter((id) => match.config.trainingPools.find((pool) => pool.id === 'gold').faceIds.includes(id)).length, 2);
   assert.equal(allFaces.filter((id) => match.config.trainingPools.find((pool) => pool.id === 'silver').faceIds.includes(id)).length, 2);
+});
+
+test('R-SETUP-02：一层可以两格同色，两格房间和三格房间都不能整间同色', () => {
+  let floor1Pair = false;
+  for (let index = 0; index < 30; index += 1) {
+    const rooms = createLocalMatch(catalog, { seed: `room-colors-${index}` }).config.setup.castleRooms;
+    for (const room of rooms) {
+      const colors = room.tiles.map((tile) => tile.color);
+      assert.ok(colors.every((color) => ['coral', 'black', 'white'].includes(color)));
+      assert.equal(new Set(colors).size >= 2, true);
+      if (room.floor === 2) assert.equal(new Set(colors).size, colors.length);
+      if (room.floor === 1 && new Set(colors).size === 2) floor1Pair = true;
+    }
+  }
+  assert.equal(floor1Pair, true);
 });
 
 test('R-SETUP-04：逆序选牌后以原行动顺序开始，不额外获得起始资源', () => {

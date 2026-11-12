@@ -1,5 +1,5 @@
 {
-  "loopDirectory": ".local/ai/continuous-r4",
+  "loopDirectory": ".local/ai/continuous-r5",
   "python": null,
   "timeoutMilliseconds": 30000
 }

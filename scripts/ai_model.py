@@ -8,7 +8,7 @@ import torch
 from torch import nn
 
 ROOT = Path(__file__).resolve().parents[1]
-META_KEYS = ("profile", "featureVersion", "actionModelVersion", "catalogHash", "heuristicHash", "encoderHash")
+META_KEYS = ("profile", "featureVersion", "actionModelVersion", "setupVersion", "catalogHash", "heuristicHash", "encoderHash")
 
 
 class PolicyValue(nn.Module):

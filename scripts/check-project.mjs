@@ -36,7 +36,7 @@ for (const name of required) {
 const sourceFiles = [
   'src/main.js', 'src/ui/configEditor.js', 'src/engine/engine.js',
   'src/engine/cardRules.js', 'src/engine/startingDraft.js', 'src/data/catalog.js',
-  'src/ui/play.js', 'src/engine/localMatch.js', 'src/engine/actionOptions.js',
+  'src/ui/play.js', 'src/ui/actionStory.js', 'src/engine/localMatch.js', 'src/engine/actionOptions.js',
   'src/engine/influence.js', 'src/game/game.js', 'src/game/localClient.js', 'scripts/serve-play.mjs',
   'src/ai/environment.js', 'src/ai/features.js', 'src/ai/heuristicPolicy.js', 'src/ai/playOpponent.js',
   'scripts/ai-common.mjs', 'scripts/ai-env-server.mjs', 'scripts/generate-training-data.mjs', 'scripts/play-ai.mjs',

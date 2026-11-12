@@ -120,3 +120,11 @@ footer { margin-top:20px; border-top:1px solid #cfcebf; padding-top:16px; color:
 .ai-panel select { width: 100%; max-width: none; margin: 8px 0; background: #fffdf5; border: 1px solid #bbbfae; border-radius: 4px; padding: 8px; }
 .ai-panel .confirm { margin-top: 8px; }
 .ai-thinking { color: #8a6232; }
+
+.story { margin-top: 18px; border-top: 1px solid #e0dfd0; padding-top: 12px; }
+.story h3 { margin-top: 0; }
+.story-list { max-height: 320px; overflow: auto; display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+.story-item { font-size: 12px; padding: 8px 10px; border-radius: 6px; background: #f6f3e8; border-left: 3px solid #294e43; }
+.story-item.ai { background: #efe4d2; border-left-color: #a77333; }
+.story-item p { margin: 4px 0; }
+.story-item ul { margin: 4px 0 0; padding-left: 18px; }

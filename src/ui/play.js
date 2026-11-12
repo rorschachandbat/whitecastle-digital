@@ -3,6 +3,7 @@ import { activeLocalPlayer, exportLocalMatch } from '../engine/localMatch.js';
 import { placementOptions, chooseActionOption, roundGardenOptions } from '../engine/actionOptions.js';
 import { personalField } from '../engine/cardRules.js';
 import { parseCatalog } from '../data/catalog.js';
+import { describeMatch } from './actionStory.js';
 
 const root = document.querySelector('#play');
 const STORAGE = 'whitecastle.local.play.v1';
@@ -563,6 +564,7 @@ function wizardView() {
     aside.append(el('p', text(aiPaused ? 'play.ai.paused' : 'play.ai.turn', {
       generation: generationLabel(session.ai?.generation), player: playerName(actor),
     }), aiPaused ? '' : 'ai-thinking'));
+    aside.append(storyPanel());
     return aside;
   }
   if (probe) {
@@ -622,7 +624,7 @@ function wizardView() {
     exchanges(aside, actor, session.match.state.players[actor]);
   } else if (session.match.phase === 'draft') aside.append(el('p', text('play.draftHint'), 'muted'));
   const help = el('p', text('play.testGuide'), 'test-guide');
-  aside.append(help);
+  aside.append(help, storyPanel());
   return aside;
 }
 function scoreView() {
@@ -643,6 +645,33 @@ function scoreView() {
   table.append(total);
   node.append(table);
   return node;
+}
+function storyPanel() {
+  const panel = el('section', null, 'story');
+  panel.append(el('h3', text('play.story.title')));
+  const entries = describeMatch(session.match);
+  if (!entries.length) {
+    panel.append(el('p', text('play.story.empty'), 'muted'));
+    return panel;
+  }
+  const list = el('ol', null, 'story-list');
+  for (const [index, entry] of entries.entries()) {
+    const item = el('li', null, `story-item ${aiSeat && entry.actor === aiSeat ? 'ai' : 'human'}`);
+    const who = entry.actor === null ? '' : aiSeat
+      ? text(entry.actor === aiSeat ? 'play.story.whoAi' : 'play.story.whoYou', { player: playerName(entry.actor) })
+      : playerName(entry.actor);
+    item.append(el('strong', who ? `${index + 1}. ${who}` : `${index + 1}.`));
+    item.append(el('p', entry.title));
+    if (entry.details.length) {
+      const details = el('ul');
+      for (const line of entry.details) details.append(el('li', line));
+      item.append(details);
+    }
+    list.append(item);
+  }
+  panel.append(list);
+  queueMicrotask(() => { list.scrollTop = list.scrollHeight; });
+  return panel;
 }
 function logView() {
   const details = el('details', null, 'log');

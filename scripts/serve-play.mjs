@@ -17,7 +17,7 @@ const origin = `http://127.0.0.1:${port}`;
 const sessions = new Map();
 const playAi = createPlayAi({ root });
 const sourceRoutes = [
-  'src/ui/play.js', 'src/ui/play.css', 'src/ui/StringTable.js', 'src/ui/configEditor.js', 'src/ui/styles.css',
+  'src/ui/play.js', 'src/ui/actionStory.js', 'src/ui/play.css', 'src/ui/StringTable.js', 'src/ui/configEditor.js', 'src/ui/styles.css',
   'src/engine/actionOptions.js', 'src/engine/localMatch.js', 'src/engine/engine.js',
   'src/engine/startingDraft.js', 'src/engine/influence.js', 'src/engine/cardRules.js', 'src/data/catalog.js',
   'src/ui/bgaReplay.js', 'src/integrations/bgaDom.js', 'browser-extension/bga-live/capture.js',

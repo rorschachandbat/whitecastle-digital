@@ -37,6 +37,8 @@ export function sanitizeLiveCapture(payload) {
       gameAssetVersion: /^\d{6}-\d{4}$/.test(source.gameAssetVersion ?? '') ? source.gameAssetVersion : null },
     observation: { format: observation.format, version: 1, cursor: count(observation.cursor),
       progress: count(observation.progress), title: cleanText(observation.title),
+      draftPairs: Array.isArray(observation.draftPairs) && observation.draftPairs.length <= 3
+        ? observation.draftPairs.map((pair) => pick(pair, ['resource', 'action'])) : [],
       roundText: cleanText(observation.roundText, 100), players, cards: items('cards'),
       tiles: items('tiles'), dice: items('dice'), pieces: items('pieces'),
       decks: observation.decks.map((deck) => ({ kind: cleanText(deck.kind, 30), count: count(deck.count) })), logs: [] },

@@ -21,10 +21,13 @@ const dashboard = el('section');
 dashboard.append(el('p', text('live.empty'), 'empty'));
 const advice = el('section', undefined, 'panel advice');
 advice.append(el('h2', text('live.next')), el('p', text('live.nextDescription')));
-root.append(heading, status, meta, setup, dashboard, advice);
+const training = el('section', undefined, 'panel');
+root.append(heading, status, meta, setup, training, advice, dashboard);
 let current = null;
 let rendered = null;
 let supported = null;
+let adviceVersion = null;
+let checkedTraining = 0;
 const unknown = (value) => value ?? text('live.unknown');
 const labeledCopy = (key, value) => {
   const row = el('div', undefined, 'copy-row');
@@ -49,6 +52,70 @@ const list = (parent, title, rows) => {
   rows.forEach((row) => ul.append(el('li', row)));
   section.append(ul);
   parent.append(section);
+};
+const adviceErrors = {
+  BGA_ADVICE_MAPPING: 'live.adviceMapping',
+  BGA_ADVICE_PHASE: 'live.advicePhase',
+  BGA_ADVICE_PAIRS: 'live.advicePairs',
+  BGA_ADVICE_SETUP: 'live.adviceSetup',
+  BGA_ADVICE_DRAFT_INCOMPLETE: 'live.adviceIncomplete',
+  AI_MODEL_CONFIG_MISMATCH: 'live.adviceMismatch',
+  AI_PYTHON_UNAVAILABLE: 'live.advicePython',
+  AI_INFERENCE_TIMEOUT: 'live.adviceTimeout',
+};
+function renderAdvice(latest, connected) {
+  advice.replaceChildren(el('h2', text('live.next')));
+  if (!adviceVersion) { advice.append(el('p', text('live.restart'))); return; }
+  if (!connected || !latest) { advice.append(el('p', text('live.adviceWaiting'))); return; }
+  const result = latest.recommendations;
+  if (!result || result.status === 'pending') { advice.append(el('p', text('live.advicePending'))); return; }
+  if (result.status !== 'ready') {
+    advice.append(el('p', text(adviceErrors[result.code] ?? 'live.adviceError')),
+      el('p', text('live.adviceBoundary'), 'muted'));
+    return;
+  }
+  const name = latest.observation.players.find((player) => player.id === result.actor)?.name ?? result.actor;
+  advice.append(el('p', text('live.adviceActor', { name }), 'action'),
+    el('p', text('live.adviceModel', { generation: Number(result.model.replace('generation-', '')) }), 'muted'));
+  const effect = (gain) => text('live.effect', { amount: gain.amount, effect: text(`editor.effect.${gain.type}`) });
+  const candidates = el('ol', undefined, 'candidates');
+  for (const candidate of result.candidates) {
+    const item = el('li');
+    item.append(el('strong', text('live.adviceCandidate', { column: candidate.column,
+      action: text(`editor.effect.${candidate.action}`), weight: (candidate.policyWeight * 100).toFixed(1) })),
+    el('p', text('live.adviceGains', { gains: candidate.gains.map(effect).join('、') })),
+    el('p', text('live.adviceLantern', { gains: candidate.lantern.map(effect).join('、') }), 'muted'),
+    el('code', `${candidate.resourceId} + ${candidate.actionId}`));
+    candidates.append(item);
+  }
+  advice.append(candidates, el('p', text('live.adviceNotice'), 'muted'));
+}
+async function refreshTraining() {
+  if (!adviceVersion || Date.now() - checkedTraining < 10_000) return;
+  checkedTraining = Date.now();
+  training.replaceChildren(el('h2', text('live.training')));
+  try {
+    const response = await fetch('/api/live/training');
+    if (!response.ok) throw new Error();
+    const value = await response.json();
+    if (value.status !== 'available') {
+      training.append(el('p', text(value.status === 'incompatible' ? 'live.adviceMismatch' : 'live.trainingMissing')));
+      return;
+    }
+    training.append(el('p', text('live.trainingProgress', { generation: value.generation,
+      games: value.completedSelfplayGames, phase: text(phaseKeys[value.phase] ?? 'live.phase.other') })),
+    el('p', text('live.trainingChampion', { generation: Number(value.champion?.replace('generation-', '')),
+      state: text(value.running ? 'live.trainingRunning' : 'live.trainingIdle') })));
+    if (value.guideEvaluation) training.append(el('p', text('live.trainingEvaluation', {
+      wins: value.guideEvaluation.wins, games: value.guideEvaluation.games,
+      margin: value.guideEvaluation.averageMargin.toFixed(2),
+    }), 'muted'));
+    training.append(el('p', text('live.trainingScope'), 'muted'));
+  } catch { training.append(el('p', text('live.trainingMissing'))); }
+}
+const phaseKeys = {
+  selfplay: 'live.phase.selfplay', evaluation: 'live.phase.evaluation',
+  warmup: 'live.phase.warmup', stopped: 'live.phase.stopped',
 };
 function render(latest) {
   dashboard.replaceChildren();
@@ -115,10 +182,13 @@ async function refresh() {
     meta.textContent = watch ? text('live.updated', { table: watch.table, seconds: unknown(seconds), updates }) : '';
     const version = JSON.stringify([watch?.id, updates]);
     if (rendered !== version) { render(latest); rendered = version; }
+    renderAdvice(latest, state === 'live.connected');
+    void refreshTraining();
     if (latest && setup.open && state === 'live.connected') setup.open = false;
   } catch {
     status.textContent = text('live.disconnected');
     status.dataset.connected = 'false';
+    renderAdvice(null, false);
   }
 }
 try {
@@ -126,7 +196,9 @@ try {
   if (!response.ok) throw new Error('NETWORK');
   const config = await response.json();
   supported = config.assetVersion;
-  setup.append(labeledCopy('live.folder', config.extensionPath), labeledCopy('live.pair', config.token));
+  adviceVersion = config.adviceVersion;
+  setup.append(labeledCopy('live.address', location.origin),
+    labeledCopy('live.folder', config.extensionPath), labeledCopy('live.pair', config.token));
   await refresh();
   setInterval(refresh, 1000);
 } catch { status.textContent = text('live.disconnected'); }

@@ -25,5 +25,8 @@ ul { padding-left: 20px; }
 code { display: block; font-size: 12px; padding: 5px 0; }
 .empty { padding: 48px 0; color: #777165; }
 .advice { border-top: 3px solid #a98d5f; }
+.candidates { padding-left: 24px; }
+.candidates li { padding: 12px 8px; border-bottom: 1px solid #e5dfd1; }
+.candidates p { margin: 6px 0; }
 :focus-visible { outline: 3px solid #a47a43; outline-offset: 3px; }
 @media (max-width: 500px) { main { padding: 22px 14px; } h1 { font-size: 28px; } .copy-row { display: block; } button { margin-top: 8px; } }

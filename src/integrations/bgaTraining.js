@@ -33,12 +33,17 @@ export function draftMatchFromBga(archive, catalog, mapping) {
   if (players.some((id) => Number(data.players[id].score) !== 0 || data.players[id].actionCard
     || data.players[id].lanternCards?.length
     || ASSETS.slice(0, 5).some((key) => data.players[id].extra?.[key] !== 0))) fail('BGA_DRAFT_INITIAL_INVALID');
+  return { match: buildBgaDraftSetup(data, catalog, mapping, { seed: `bga-draft:${archive.source.table}` }), seatMap };
+}
+
+/** 选牌摆设的共用适配器；调用方须先核验阶段及公开资料来源。 */
+export function buildBgaDraftSetup(data, catalog, mapping, { seed, playOrder = ['0', '1'] }) {
   const mapped = (family, definition, side) => {
     const result = mapBgaDefinition(mapping, family, definition, side);
     if (typeof result !== 'string') fail('BGA_CARD_UNSUPPORTED');
     return result;
   };
-  const match = createLocalMatch(catalog, { seed: `bga-draft:${archive.source.table}`, playOrder: ['0', '1'] });
+  const match = createLocalMatch(catalog, { seed, playOrder });
   const config = match.config;
   const roomSlots = {
     'floor1-1': [-3, 3, 8], 'floor1-2': [-2, 4, 9], 'floor1-3': [-1, 5, 10],
@@ -115,7 +120,7 @@ export function draftMatchFromBga(archive, catalog, mapping) {
   if (new Set(pairs.map((pair) => pair.resourceId)).size !== 3) fail('BGA_DRAFT_PAIRS_INVALID');
   match.draft.pairs = pairs;
   match.draft.canonicalSignature = canonicalCatalog(config);
-  return { match, seatMap };
+  return match;
 }
 
 /** R-SETUP-04：只接纳完整且无撤销的选牌段，资源收益必须与本地原子规则逐项相符。 */

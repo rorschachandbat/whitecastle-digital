@@ -24,6 +24,8 @@ const required = [
   'bga-live.html', 'src/ui/bgaLive.js', 'src/ui/bgaLive.css', 'src/integrations/bgaLive.js',
   'scripts/serve-bga-live.mjs', 'scripts/bga-live.ps1', 'docs/bga-live.md',
   'browser-extension/bga-live/manifest.json', 'browser-extension/bga-live/capture.js',
+  'data/bga-live-ai.json', 'src/integrations/bgaLiveAdvice.js',
+  'scripts/bga-live-ai.mjs', 'scripts/infer-live.py',
 ];
 for (const name of required) {
   if (!fs.existsSync(path.join(root, name))) {
@@ -41,6 +43,7 @@ const sourceFiles = [
   'src/ui/bgaReplay.js', 'src/integrations/bgaDom.js', 'src/integrations/bgaReplay.js',
   'scripts/import-bga-replay.mjs',
   'src/integrations/bgaLive.js', 'src/ui/bgaLive.js', 'scripts/serve-bga-live.mjs',
+  'src/integrations/bgaLiveAdvice.js', 'src/integrations/bgaTraining.js', 'scripts/bga-live-ai.mjs',
   ...['capture.js', 'background.js', 'watcher.js', 'popup.js', 'StringTable.js']
     .map((name) => `browser-extension/bga-live/${name}`),
 ];

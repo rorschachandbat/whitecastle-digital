@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { sanitizeLiveCapture, mapLiveCapture } from '../src/integrations/bgaLive.js';
+import { createLiveAi } from './bga-live-ai.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const staticFiles = new Map([
@@ -27,13 +28,33 @@ async function bodyOf(request) {
   catch { fail('BGA_LIVE_INVALID_JSON'); }
 }
 
-export async function createLiveServer({ catalog, mapping, token = randomBytes(24).toString('hex') } = {}) {
+export async function createLiveServer({ catalog, mapping, token = randomBytes(24).toString('hex'), ai = createLiveAi() } = {}) {
   catalog ??= JSON.parse(await fs.readFile(path.join(root, 'data/whitecastle-2p.json'), 'utf8'));
   mapping ??= JSON.parse(await fs.readFile(path.join(root, 'data/bga-mapping.json'), 'utf8'));
   let watch = null;
   let latest = null;
   let digest = null;
   let updates = 0;
+  let queued = null;
+  let analyzing = false;
+  let training = null;
+  let trainingCheckedAt = 0;
+  const analyzeNext = async () => {
+    if (analyzing || !queued) return;
+    analyzing = true;
+    const job = queued;
+    queued = null;
+    try {
+      const result = await ai.analyze(job.latest);
+      if (watch?.active && watch.id === job.watchId && latest === job.latest
+        && Date.now() - Date.parse(watch.receivedAt) <= 6000) latest.recommendations = result;
+    } catch {
+      if (watch?.active && watch.id === job.watchId && latest === job.latest
+        && Date.now() - Date.parse(watch.receivedAt) <= 6000) {
+        latest.recommendations = { status: 'error', code: 'AI_INFERENCE_FAILED' };
+      }
+    } finally { analyzing = false; void analyzeNext(); }
+  };
   const server = http.createServer(async (request, response) => {
     const json = (status, value) => {
       response.writeHead(status, { ...headers, 'Content-Type': 'application/json; charset=utf-8' });
@@ -59,11 +80,18 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
       }
       if (url.pathname === '/api/live/config' && request.method === 'GET') {
         return json(200, { token, extensionPath: path.join(root, 'browser-extension/bga-live'),
-          assetVersion: mapping.gameAssetVersion });
+          assetVersion: mapping.gameAssetVersion, adviceVersion: 1 });
       }
       if (url.pathname === '/api/live/state' && request.method === 'GET') {
         return json(200, { format: 'whitecastle-bga-live-status', workspaceRoot: root,
           watch, latest, updates, serverTime: new Date().toISOString() });
+      }
+      if (url.pathname === '/api/live/training' && request.method === 'GET') {
+        if (!training || Date.now() - trainingCheckedAt > 10_000) {
+          training = await ai.trainingStatus();
+          trainingCheckedAt = Date.now();
+        }
+        return json(200, training);
       }
       if (['/api/live/connect', '/api/live/capture', '/api/live/stop'].includes(url.pathname) && request.method === 'POST') {
         const supplied = Buffer.from(request.headers.authorization ?? '');
@@ -77,9 +105,14 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
           latest = null;
           digest = null;
           updates = 0;
+          queued = null;
         } else {
           if (!watch?.active || watch.id !== data.watchId) fail('BGA_LIVE_WATCH_EXPIRED', 409);
-          if (url.pathname === '/api/live/stop') watch.active = false;
+          if (url.pathname === '/api/live/stop') {
+            watch.active = false;
+            queued = null;
+            if (latest) latest.recommendations = null;
+          }
           else {
             const capture = sanitizeLiveCapture(data);
             if (capture.source.table !== watch.table || capture.sequence <= watch.sequence) fail('BGA_LIVE_STALE_CAPTURE', 409);
@@ -89,9 +122,14 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
             if (digest !== nextDigest) {
               const result = mapLiveCapture(capture, catalog, mapping);
               latest = { source: capture.source, observation: capture.observation, ...result,
-                changedAt: watch.receivedAt, trainingEligible: false, recommendations: null };
+                changedAt: watch.receivedAt, trainingEligible: false, recommendations: { status: 'pending' } };
               digest = nextDigest;
               updates += 1;
+              queued = { latest, watchId: watch.id };
+              void analyzeNext();
+            } else if (latest?.recommendations?.status === 'pending' && !analyzing && !queued) {
+              queued = { latest, watchId: watch.id };
+              void analyzeNext();
             }
           }
         }

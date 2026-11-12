@@ -24,12 +24,30 @@ function captureBgaDocument(root, { live = false } = {}) {
       ancestors: ancestry(element),
     };
   });
+  // 起始选牌只在剩余牌组同时可见且布局稳定时记录配对，动画或换行时留空。
+  const draftPairs = () => {
+    if (!live) return [];
+    const row = (kind) => [...root.querySelectorAll(`#twc-starting-${kind}-draft-stock .twc-main-card`)]
+      .filter(visible).map((element) => ({ id: element.id, rect: element.getBoundingClientRect() }))
+      .sort((a, b) => a.rect.left - b.rect.left);
+    const resources = row('resource');
+    const actions = row('action');
+    if (![2, 3].includes(resources.length) || resources.length !== actions.length) return [];
+    if ([resources, actions].some((cards) => cards.some((card, index) => card.rect.width <= 0 || card.rect.height <= 0
+      || Math.abs(card.rect.top - cards[0].rect.top) > 5
+      || (index > 0 && card.rect.left - cards[index - 1].rect.left < card.rect.width * 0.5)))) return [];
+    const close = (a, b) => Math.abs(a.left + a.width / 2 - b.left - b.width / 2)
+      <= Math.max(3, Math.min(a.width, b.width) * 0.2);
+    return resources.every((card, index) => close(card.rect, actions[index].rect))
+      ? resources.map((card, index) => ({ resource: card.id, action: actions[index].id })) : [];
+  };
   return {
     format: 'whitecastle-bga-observation', version: 1,
     cursor: number(root.querySelector('#move_nbr')),
     progress: number(root.querySelector('#pr_gameprogression')),
     roundText: root.querySelector('#twc-main-game-panel-round-counter')?.textContent ?? null,
     title: root.querySelector('#pagemaintitletext')?.textContent ?? null,
+    draftPairs: draftPairs(),
     players: [...root.querySelectorAll('[id^="twc-player-panel-resources-"]')].filter(visible).map((element) => {
       const id = element.id.replace('twc-player-panel-resources-', '');
       return {

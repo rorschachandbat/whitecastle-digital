@@ -49,7 +49,10 @@ test('不同资产版本和多人数可以展示原始数据，但不冒充两�
 
 test('接收端验证配对、乱序、换桌、停止和跨域，重复心跳不重复映射', async (t) => {
   const token = 'a'.repeat(48);
-  const server = await createLiveServer({ catalog, mapping, token });
+  const server = await createLiveServer({ catalog, mapping, token, ai: {
+    analyze: async () => ({ status: 'unsupported', code: 'BGA_ADVICE_PHASE' }),
+    trainingStatus: async () => ({ status: 'available', modelSource: 'continuous-champion' }),
+  } });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => { server.closeAllConnections(); server.close(); });
@@ -71,7 +74,7 @@ test('接收端验证配对、乱序、换桌、停止和跨域，重复心跳�
   let state = await (await fetch(`${origin}/api/live/state`)).json();
   assert.equal(state.updates, 1);
   assert.equal(state.watch.sequence, 2);
-  assert.equal(state.latest.recommendations, null);
+  assert.equal(state.latest.recommendations.status, 'unsupported');
   assert.equal(state.latest.trainingEligible, false);
   assert.equal((await post('capture', { ...capture(), sequence: 3, source: { ...capture().source, table: '999' } })).status, 409);
   assert.equal((await post('stop', { watchId })).status, 200);
@@ -81,6 +84,45 @@ test('接收端验证配对、乱序、换桌、停止和跨域，重复心跳�
   assert.equal(state.latest, null);
   assert.equal(state.watch.table, '999');
   assert.equal((await fetch(`${origin}/../package.json`)).status, 404);
+  assert.equal((await (await fetch(`${origin}/api/live/training`)).json()).modelSource, 'continuous-champion');
+});
+
+test('异步建议在新盘面、换桌或停止后不能覆盖当前状态', async (t) => {
+  const jobs = [];
+  const token = 'b'.repeat(48);
+  const server = await createLiveServer({ token, ai: {
+    analyze: (latest) => new Promise((resolve) => jobs.push({ latest, resolve })),
+    trainingStatus: async () => ({ status: 'unavailable' }),
+  } });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (route, data) => fetch(`${origin}/api/live/${route}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const state = async () => (await fetch(`${origin}/api/live/state`)).json();
+  await post('connect', { watchId, table: '123' });
+  await post('capture', capture());
+  const next = capture();
+  next.sequence = 2;
+  next.observation.title = '下一手';
+  await post('capture', next);
+  jobs[0].resolve({ status: 'ready', marker: 'old' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await state()).latest.recommendations.status, 'pending');
+  assert.equal(jobs.length, 2);
+  await post('stop', { watchId });
+  jobs[1].resolve({ status: 'ready', marker: 'stopped' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await state()).latest.recommendations, null);
+  await post('connect', { watchId, table: '123' });
+  await post('capture', capture());
+  await post('connect', { watchId: '22222222-2222-2222-2222-222222222222', table: '456' });
+  jobs[2].resolve({ status: 'ready', marker: 'other-table' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await state()).latest, null);
 });
 
 test('扩展按稳定DOM采样、忽略隐藏元素，停止后没有计时器叠加', async () => {
@@ -174,4 +216,27 @@ test('扩展后台只转发手动授权标签页与桌号，页面不能伪造�
   await handle({ type: 'STOP' }, popup);
   assert.equal(store.watch, undefined);
   assert.ok(requests[2].url.endsWith('/api/live/stop'));
+});
+
+test('选牌配对来自可见坐标，行换位可对应，重叠或换行不猜组合', () => {
+  const context = vm.createContext({});
+  vm.runInContext(fs.readFileSync(new URL('../browser-extension/bga-live/capture.js', import.meta.url), 'utf8'), context);
+  const make = (id, left, top) => ({
+    id, getClientRects: () => [{}],
+    getBoundingClientRect: () => ({ left, top, width: 100, height: 140 }),
+  });
+  const resources = [make('r2', 200, 0), make('r1', 0, 0)];
+  const actions = [make('a1', 0, 150), make('a2', 200, 150)];
+  const root = {
+    querySelector: () => null,
+    querySelectorAll: (selector) => selector.includes('resource-draft-stock') ? resources
+      : selector.includes('action-draft-stock') ? actions : [],
+  };
+  const captureDom = vm.runInContext('whitecastleCaptureBgaDocument', context);
+  const pairs = () => JSON.parse(JSON.stringify(captureDom(root, { live: true }).draftPairs));
+  assert.deepEqual(pairs(), [{ resource: 'r1', action: 'a1' }, { resource: 'r2', action: 'a2' }]);
+  actions[1] = make('a2', 0, 150);
+  assert.deepEqual(pairs(), []);
+  actions[1] = make('a2', 200, 300);
+  assert.deepEqual(pairs(), []);
 });

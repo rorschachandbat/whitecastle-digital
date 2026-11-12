@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { prepareLiveAdvice } from '../src/integrations/bgaLiveAdvice.js';
+import { preparePlayingAdvice, rememberLiveContext } from '../src/integrations/bgaLivePlaying.js';
 import { loadTrainingConfig, projectRoot } from './ai-common.mjs';
 
 const read = async (file) => JSON.parse(await fs.readFile(file, 'utf8'));
@@ -13,11 +14,34 @@ const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 export function createLiveAi({ root = projectRoot, inferModel } = {}) {
   let settings;
   let parameters;
+  const contexts = new Map();
+  let contextQueue = Promise.resolve();
   const config = async () => {
     settings ??= await read(path.join(root, 'data/bga-live-ai.json'));
     parameters ??= loadTrainingConfig(path.join(root, 'data/whitecastle-2p.json'), path.join(root, 'data/ai-heuristic.json'));
     return { ...settings, loop: path.resolve(root, settings.loopDirectory), ...parameters };
   };
+  const observe = (latest) => {
+    const task = contextQueue.then(() => observeContext(latest));
+    contextQueue = task.catch(() => {});
+    return task;
+  };
+  async function observeContext(latest) {
+    const c = await config();
+    const mapping = await read(path.join(root, 'data/bga-mapping.json'));
+    const table = latest.source?.table;
+    if (!/^\d+$/.test(table ?? '')) fail('BGA_ADVICE_MAPPING');
+    const contextFile = path.join(root, '.local/bga-live/contexts', `${table}.json`);
+    if (!contexts.has(table)) contexts.set(table, await read(contextFile).catch(() => null));
+    const context = rememberLiveContext(contexts.get(table), latest, { ...c, mapping });
+    if (context && JSON.stringify(context) !== JSON.stringify(contexts.get(table))) {
+      await fs.mkdir(path.dirname(contextFile), { recursive: true });
+      await fs.writeFile(`${contextFile}.tmp`, JSON.stringify(context));
+      await fs.rename(`${contextFile}.tmp`, contextFile);
+      contexts.set(table, context);
+    }
+    return { ...c, mapping, context };
+  }
   async function trainingStatus() {
     try {
       const { loop, meta } = await config();
@@ -39,12 +63,16 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
   async function analyze(latest) {
     let prepared;
     try {
-      const c = await config();
-      const mapping = await read(path.join(root, 'data/bga-mapping.json'));
-      prepared = prepareLiveAdvice(latest, { ...c, mapping });
+      const c = await observe(latest);
+      try { prepared = prepareLiveAdvice(latest, c); }
+      catch (error) {
+        if (error.code !== 'BGA_ADVICE_PHASE') throw error;
+        prepared = preparePlayingAdvice(latest, c);
+      }
       const state = await read(path.join(c.loop, 'loop-state.json'));
       if (!sameMeta(state.meta, c.meta)) fail('AI_MODEL_CONFIG_MISMATCH');
-      const result = inferModel ? await inferModel(prepared.observation, c) : await inferProcess(prepared.observation, c);
+      const result = inferModel ? await inferModel(prepared.observation, c)
+        : await inferProcess(prepared.observation, c, prepared.observations);
       if (result.source !== 'continuous-champion' || !/^generation-\d+$/.test(result.model)
         || result.policy?.length !== prepared.candidates.length
         || result.policy.some((value) => !Number.isFinite(value) || value < 0 || value > 1)
@@ -58,7 +86,7 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
         code: error.code ?? 'AI_INFERENCE_FAILED', source: 'continuous-champion' };
     }
   }
-  async function inferProcess(observation, c) {
+  async function inferProcess(observation, c, observations) {
     const windowsPython = path.join(root, '.local/ai-venv/Scripts/python.exe');
     const unixPython = path.join(root, '.local/ai-venv/bin/python');
     const python = c.python ? path.resolve(root, c.python)
@@ -85,8 +113,8 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
           resolve(result);
         } catch (error) { reject(error); }
       });
-      child.stdin.end(JSON.stringify({ meta: c.meta, observation }));
+      child.stdin.end(JSON.stringify({ meta: c.meta, observation, observations }));
     });
   }
-  return { analyze, trainingStatus };
+  return { analyze, observe, trainingStatus };
 }

@@ -21,6 +21,40 @@ const capture = () => ({
   },
 });
 
+test('历史快照重新清洗映射并独立分析，不伪造实时心跳，不信任导出中附带的建议', async (t) => {
+  const token = 'b'.repeat(48);
+  let analyzed;
+  const server = await createLiveServer({ catalog, mapping, token, ai: {
+    analyze: async (latest) => { analyzed = latest; return { status: 'unsupported', code: 'BGA_ADVICE_PHASE' }; },
+    trainingStatus: async () => ({ status: 'available' }),
+  } });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const payload = { format: 'whitecastle-bga-live-snapshot', version: 1,
+    receivedAt: '2026-11-11T00:00:00Z', ...capture(), archive: { fabricated: true },
+    recommendations: { status: 'ready', source: 'fake-model' }, trainingEligible: true };
+  const post = (authorization) => fetch(`${origin}/api/live/analyze-snapshot`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authorization },
+    body: JSON.stringify(payload),
+  });
+  assert.equal((await post('wrong')).status, 401);
+  const response = await post(`Bearer ${token}`);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.mode, 'snapshot');
+  assert.equal(result.latest.trainingEligible, false);
+  assert.equal(result.latest.recommendations.source, undefined);
+  assert.equal(analyzed.archive.fabricated, undefined);
+  assert.deepEqual(analyzed.observation.logs, []);
+  const status = await (await fetch(`${origin}/api/live/state`)).json();
+  assert.equal(status.watch, null);
+  assert.equal(status.latest, null);
+  assert.equal(status.updates, 0);
+  assert.deepEqual((await (await fetch(`${origin}/api/live/snapshot`)).json()).latest, result.latest);
+});
+
 test('实时缺失游标保留null，私密附加字段及未来日志不进入快照', () => {
   const value = capture();
   value.cookie = 'secret';

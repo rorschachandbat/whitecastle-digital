@@ -83,6 +83,36 @@ export function prepareLiveAdvice(latest, { catalog, mapping, weights }) {
     chosenChoices = ASSETS.slice(0, 3).flatMap((key) => Array(resourcesOf(chosen)[key]
       - resource.initialGains.filter((gain) => gain.type === key).reduce((sum, gain) => sum + gain.amount, 0)).fill(key));
   }
+  const match = buildLiveBoard(latest, pairs, { catalog, mapping, playOrder });
+  if (chosen) {
+    match.draft = chooseStartingPair(match.draft, chosen.seat, 'starting-pair-3', match.config, { choices: chosenChoices });
+    if (!equal(match.draft.players[chosen.seat].resources, resourcesOf(chosen))) fail('BGA_ADVICE_DRAFT_INCOMPLETE');
+  }
+  const env = new TrainingEnvironment(catalog, weights);
+  const observation = env.initialize(match);
+  const actor = one(p.players.filter((player) => player.seat === observation.actor));
+  return { observation, actor: actor.platformId, scope: 'starting-draft-only',
+    draftContext: pairs.map(({ resource, action }) => ({
+      resource: { instance: resource.instance, family: resource.family, definition: resource.definition, localId: resource.localId },
+      action: { instance: action.instance, family: action.family, definition: action.definition, localId: action.localId },
+    })),
+    candidates: env.getLegalActions().map((option) => {
+      const index = match.draft.pairs.findIndex((pair) => pair.id === option.action.pairId);
+      const pair = match.draft.pairs[index];
+      const resource = one(catalog.cards.filter((card) => card.id === pair.resourceId));
+      const actionId = mapBgaDefinition(mapping, 'starting-action', pairs[index].action.definition)[0];
+      const action = one(catalog.cards.filter((card) => card.id === actionId));
+      return { column: index + 1, resourceId: pair.resourceId, actionId: pair.actionId,
+        resourceInstance: pairs[index].resource.instance, actionInstance: pairs[index].action.instance,
+        gains: resource.initialGains, action: action.fields[0].effects[0].type,
+        lantern: [...resource.back, ...(resource.grantDecreeId
+          ? one(catalog.cards.filter((card) => card.id === resource.grantDecreeId)).back : [])] };
+    }) };
+}
+
+/** 只把本次公开摆设交给共用配置器，不补推未知牌面。 */
+export function buildLiveBoard(latest, pairs, { catalog, mapping, playOrder, publicRemovedCards = [] }) {
+  const p = latest.archive.publicPosition;
   const localCard = (card) => one(catalog.cards.filter((item) => item.id === card.localId));
   const data = {
     stewardCardsDeckCount: one(p.decks.filter((deck) => deck.kind === 'steward')).count,
@@ -110,26 +140,7 @@ export function prepareLiveAdvice(latest, { catalog, mapping, weights }) {
   };
   if (p.training.length !== 4 || p.dieTiles.length !== 15 || data.gardenCards.length !== 6) fail('BGA_ADVICE_SETUP');
   let match;
-  try { match = buildBgaDraftSetup(data, catalog, mapping, { seed: 'public-live-draft', playOrder }); }
+  try { match = buildBgaDraftSetup(data, catalog, mapping, { seed: 'public-live-draft', playOrder, publicRemovedCards }); }
   catch { fail('BGA_ADVICE_SETUP'); }
-  if (chosen) {
-    match.draft = chooseStartingPair(match.draft, chosen.seat, 'starting-pair-3', match.config, { choices: chosenChoices });
-    if (!equal(match.draft.players[chosen.seat].resources, resourcesOf(chosen))) fail('BGA_ADVICE_DRAFT_INCOMPLETE');
-  }
-  const env = new TrainingEnvironment(catalog, weights);
-  const observation = env.initialize(match);
-  const actor = one(p.players.filter((player) => player.seat === observation.actor));
-  return { observation, actor: actor.platformId, scope: 'starting-draft-only',
-    candidates: env.getLegalActions().map((option) => {
-      const index = match.draft.pairs.findIndex((pair) => pair.id === option.action.pairId);
-      const pair = match.draft.pairs[index];
-      const resource = one(catalog.cards.filter((card) => card.id === pair.resourceId));
-      const actionId = mapBgaDefinition(mapping, 'starting-action', pairs[index].action.definition)[0];
-      const action = one(catalog.cards.filter((card) => card.id === actionId));
-      return { column: index + 1, resourceId: pair.resourceId, actionId: pair.actionId,
-        resourceInstance: pairs[index].resource.instance, actionInstance: pairs[index].action.instance,
-        gains: resource.initialGains, action: action.fields[0].effects[0].type,
-        lantern: [...resource.back, ...(resource.grantDecreeId
-          ? one(catalog.cards.filter((card) => card.id === resource.grantDecreeId)).back : [])] };
-    }) };
+  return match;
 }

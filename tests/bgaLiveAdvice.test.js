@@ -7,6 +7,9 @@ import { prepareLiveAdvice } from '../src/integrations/bgaLiveAdvice.js';
 import { mapBgaDefinition } from '../src/integrations/bgaReplay.js';
 import { loadTrainingConfig } from '../scripts/ai-common.mjs';
 import { createLiveAi } from '../scripts/bga-live-ai.mjs';
+import { rememberLiveContext, preparePlayingAdvice } from '../src/integrations/bgaLivePlaying.js';
+import { chooseStartingPair } from '../src/engine/startingDraft.js';
+import { buildLiveBoard } from '../src/integrations/bgaLiveAdvice.js';
 
 const config = loadTrainingConfig();
 const mapping = JSON.parse(fs.readFileSync(new URL('../data/bga-mapping.json', import.meta.url)));
@@ -147,4 +150,95 @@ test('本机冠军实际推理能返回同编码候选的策略排序', {
   assert.ok(Math.abs(result.candidates.reduce((sum, item) => sum + item.policyWeight, 0) - 1) < 0.0001);
   console.log(JSON.stringify({ model: result.model, source: result.source,
     tested: 'synthetic-opening-position', bestColumn: result.candidates[0].column }));
+});
+
+function playingFixture() {
+  const opening = fixture();
+  opening.changedAt = '2026-11-12T01:00:00Z';
+  const context = rememberLiveContext(null, opening, parameters);
+  assert.ok(context.pairs);
+  const latest = structuredClone(opening);
+  latest.changedAt = '2026-11-12T01:01:00Z';
+  latest.observation.players = [{ id: '100', name: '甲' }, { id: '101', name: '乙' }];
+  latest.observation.title = '甲 必须从桥上选择一个骰子并将它放在一个行动位置上';
+  const p = latest.archive.publicPosition;
+  p.progress = 11;
+  p.roundText = '第 1 / 3 轮次';
+  let draft = buildLiveBoard(opening, context.pairs, { ...parameters, playOrder: ['0', '1'] }).draft;
+  for (const [index, seat] of [[0, '1'], [1, '0']]) {
+    const resource = p.cards.find((card) => card.instance === `resource-${index}`);
+    const action = p.cards.find((card) => card.instance === `action-${index}`);
+    const definition = config.catalog.cards.find((card) => card.id === resource.localId);
+    const choices = definition.initialGains.filter((gain) => gain.type === 'chooseResource')
+      .flatMap((gain) => Array(gain.amount).fill('food'));
+    draft = chooseStartingPair(draft, seat, `starting-pair-${index + 1}`,
+      buildLiveBoard(opening, context.pairs, { ...parameters, playOrder: ['0', '1'] }).config, { choices });
+    const player = p.players.find((item) => item.seat === seat);
+    player.resources = { ...draft.players[seat].resources };
+    Object.assign(resource, { faceDown: true, localId: null, back: definition.back,
+      containers: [`twc-lantern-card-stock-${player.platformId}`] });
+    action.containers = [`twc-action-card-stock-${player.platformId}`];
+    if (definition.grantDecreeId) p.cards.push({ instance: `decree-${seat}`, family: 'decree',
+      localId: definition.grantDecreeId, faceDown: true, containers: [`twc-lantern-card-stock-${player.platformId}`] });
+  }
+  p.dice.forEach((die, index) => { die.instance = `die-${index}`; });
+  p.dice[0].slot = 'action-space-main-board-steward-1';
+  p.dice[1].slot = 'red-left';
+  p.dice[8].slot = 'action-space-main-board-steward-3';
+  p.dice[7].slot = 'white-right';
+  return { latest, context };
+}
+
+test('普通放骰还原双方回合、占位和公开牌背，保持主模型编码尺寸', () => {
+  const { latest, context } = playingFixture();
+  const result = preparePlayingAdvice(latest, { ...parameters, context });
+  assert.equal(result.scope, 'placement-root-only');
+  assert.equal(result.actor, '100');
+  assert.equal(result.observation.state.length, 2345);
+  assert.equal(result.observations.length, 6);
+  assert.equal(result.observation.state[5], 1 / 3);
+  assert.equal(result.observation.state[6], 1 / 3);
+  assert.ok(result.candidates.length > 0);
+  for (const candidate of result.candidates) {
+    if (candidate.kind !== 'placeDie') continue;
+    assert.ok(!['floor1-1', 'floor1-3'].includes(candidate.target.id));
+    assert.equal(result.observation.candidates[0].length, 160);
+  }
+  latest.observation.title = '你 必须从桥中选择一个骰子，并将其放置在一个行动上';
+  assert.equal(preparePlayingAdvice(latest, { ...parameters, context }).actor, '100');
+});
+
+test('普通放骰不使用未来日志，缺上下文、跨桌、未来事实、错回合、时间轨和连锁拒绝', () => {
+  const { latest, context } = playingFixture();
+  const before = preparePlayingAdvice(latest, { ...parameters, context });
+  latest.archive.history = [{ future: 'future-card' }];
+  latest.observation.logs = [{ future: 'future-roll' }];
+  assert.deepEqual(preparePlayingAdvice(latest, { ...parameters, context }), before);
+  for (const [change, code] of [
+    [(v, c) => { c.pairs = null; }, 'BGA_ADVICE_CONTEXT'],
+    [(v) => { v.source.table = '456'; }, 'BGA_ADVICE_CONTEXT'],
+    [(v, c) => { c.seenAt += 3600_000; }, 'BGA_ADVICE_CONTEXT'],
+    [(v) => { v.observation.title = '乙 必须从桥上选择一个骰子并将它放在一个行动位置上'; }, 'BGA_ADVICE_TURN'],
+    [(v) => { v.archive.publicPosition.pieces.find((piece) => piece.type === 'influence').slot = 'influence-1'; }, 'BGA_ADVICE_TIME_ORDER'],
+    [(v) => { v.observation.title = '甲 必须选择一项城堡行动'; }, 'BGA_ADVICE_PHASE'],
+    [(v) => { v.archive.publicPosition.dice[0].slot = 'unknown'; }, 'BGA_ADVICE_DICE_SLOT'],
+  ]) {
+    const v = structuredClone(latest);
+    const c = structuredClone(context);
+    change(v, c);
+    assert.throws(() => preparePlayingAdvice(v, { ...parameters, context: c }), { code });
+  }
+});
+
+test('公开上下文不会由后采样覆盖过去，可见背面不抹除曾见正面', () => {
+  const { latest, context } = playingFixture();
+  const updated = rememberLiveContext(context, latest, parameters);
+  assert.equal(updated.faces['resource-0'].localId, context.faces['resource-0'].localId);
+  const previous = structuredClone(latest);
+  previous.changedAt = '2026-11-12T00:59:00Z';
+  previous.archive.publicPosition.cards[0].localId = 'fabricated';
+  assert.deepEqual(rememberLiveContext(updated, previous, parameters), updated);
+  const swapped = structuredClone(latest);
+  swapped.source.table = '789';
+  assert.equal(rememberLiveContext(updated, swapped, parameters).pairs, null);
 });

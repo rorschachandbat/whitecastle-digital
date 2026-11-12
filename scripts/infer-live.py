@@ -25,14 +25,19 @@ def main():
         raise ValueError("AI_CHAMPION_INVALID")
     torch.set_num_threads(2)
     model, _ = load_checkpoint(checkpoint_path, request["meta"])
-    observation = request["observation"]
-    if len(observation["state"]) != model.state_size or not observation["candidates"]:
+    observations = request.get("observations") or [request["observation"]]
+    if not 1 <= len(observations) <= 6:
         raise ValueError("AI_FEATURE_SIZE")
-    if any(len(option) != model.option_size for option in observation["candidates"]):
-        raise ValueError("AI_FEATURE_SIZE")
+    policies = []
     with torch.inference_mode():
-        logits, _ = infer(model, observation)
-        policy = logits.softmax(-1)
+        for observation in observations:
+            if len(observation["state"]) != model.state_size or not observation["candidates"]:
+                raise ValueError("AI_FEATURE_SIZE")
+            if any(len(option) != model.option_size for option in observation["candidates"]):
+                raise ValueError("AI_FEATURE_SIZE")
+            logits, _ = infer(model, observation)
+            policies.append(logits.softmax(-1))
+        policy = torch.stack(policies).mean(0)
     if not bool(torch.isfinite(policy).all()):
         raise ValueError("AI_NONFINITE_POLICY")
     print(json.dumps({"model": parts[-2], "source": "continuous-champion",

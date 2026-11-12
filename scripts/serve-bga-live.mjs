@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes, timingSafeEqual, createHash } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual, createHash } from 'node:crypto';
 import { sanitizeLiveCapture, mapLiveCapture } from '../src/integrations/bgaLive.js';
 import { createLiveAi } from './bga-live-ai.mjs';
 
@@ -39,6 +39,7 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
   let analyzing = false;
   let training = null;
   let trainingCheckedAt = 0;
+  let importedSnapshot = null;
   const analyzeNext = async () => {
     if (analyzing || !queued) return;
     analyzing = true;
@@ -80,11 +81,14 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
       }
       if (url.pathname === '/api/live/config' && request.method === 'GET') {
         return json(200, { token, extensionPath: path.join(root, 'browser-extension/bga-live'),
-          assetVersion: mapping.gameAssetVersion, adviceVersion: 1 });
+          assetVersion: mapping.gameAssetVersion, adviceVersion: 3 });
       }
       if (url.pathname === '/api/live/state' && request.method === 'GET') {
         return json(200, { format: 'whitecastle-bga-live-status', workspaceRoot: root,
           watch, latest, updates, serverTime: new Date().toISOString() });
+      }
+      if (url.pathname === '/api/live/snapshot' && request.method === 'GET') {
+        return json(200, { latest: importedSnapshot });
       }
       if (url.pathname === '/api/live/training' && request.method === 'GET') {
         if (!training || Date.now() - trainingCheckedAt > 10_000) {
@@ -92,6 +96,24 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
           trainingCheckedAt = Date.now();
         }
         return json(200, training);
+      }
+      if (url.pathname === '/api/live/analyze-snapshot' && request.method === 'POST') {
+        if (extension) fail('BGA_LIVE_ORIGIN_REJECTED', 403);
+        const supplied = Buffer.from(request.headers.authorization ?? '');
+        const expected = Buffer.from(`Bearer ${token}`);
+        if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) fail('BGA_LIVE_PAIR_REQUIRED', 401);
+        const data = await bodyOf(request);
+        const time = Date.parse(data.receivedAt);
+        if (data.format !== 'whitecastle-bga-live-snapshot' || data.version !== 1
+          || !Number.isFinite(time) || time > Date.now()) fail('BGA_LIVE_INVALID');
+        const capture = sanitizeLiveCapture({ watchId: randomUUID(), sequence: 1,
+          source: data.source, observation: data.observation });
+        // 导出文件中的映射和建议都重新计算，不信任附带的引擎状态或训练标志。
+        const imported = { source: capture.source, observation: capture.observation,
+          ...mapLiveCapture(capture, catalog, mapping), changedAt: data.receivedAt, trainingEligible: false };
+        imported.recommendations = await ai.analyze(imported);
+        importedSnapshot = imported;
+        return json(200, { mode: 'snapshot', latest: imported });
       }
       if (['/api/live/connect', '/api/live/capture', '/api/live/stop'].includes(url.pathname) && request.method === 'POST') {
         const supplied = Buffer.from(request.headers.authorization ?? '');
@@ -125,8 +147,14 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
                 changedAt: watch.receivedAt, trainingEligible: false, recommendations: { status: 'pending' } };
               digest = nextDigest;
               updates += 1;
-              queued = { latest, watchId: watch.id };
-              void analyzeNext();
+              const observed = latest;
+              const observedWatch = watch.id;
+              // 先保留每次公开选牌事实，再合并耗时推理任务，避免快速操作丢失开局上下文。
+              try { await ai.observe?.(observed); } catch {}
+              if (watch?.active && watch.id === observedWatch && latest === observed) {
+                queued = { latest: observed, watchId: observedWatch };
+                void analyzeNext();
+              }
             } else if (latest?.recommendations?.status === 'pending' && !analyzing && !queued) {
               queued = { latest, watchId: watch.id };
               void analyzeNext();

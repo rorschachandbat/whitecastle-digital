@@ -22,12 +22,41 @@ dashboard.append(el('p', text('live.empty'), 'empty'));
 const advice = el('section', undefined, 'panel advice');
 advice.append(el('h2', text('live.next')), el('p', text('live.nextDescription')));
 const training = el('section', undefined, 'panel');
-root.append(heading, status, meta, setup, training, advice, dashboard);
+const snapshotControls = el('section', undefined, 'panel');
+const snapshotLabel = el('label', text('live.snapshotImport'));
+const snapshotFile = el('input');
+snapshotFile.type = 'file';
+snapshotFile.accept = '.json,application/json';
+snapshotLabel.append(snapshotFile);
+const returnLive = el('button', text('live.returnLive'));
+snapshotControls.append(snapshotLabel, returnLive);
+root.append(heading, status, meta, setup, snapshotControls, training, advice, dashboard);
 let current = null;
 let rendered = null;
 let supported = null;
 let adviceVersion = null;
 let checkedTraining = 0;
+let pairToken = null;
+let importedSnapshot = null;
+let importing = false;
+snapshotFile.onchange = async () => {
+  const file = snapshotFile.files[0];
+  if (!file) return;
+  importing = true;
+  status.textContent = text('live.snapshotPending');
+  try {
+    if (file.size > 2_000_000) throw new Error();
+    const response = await fetch('/api/live/analyze-snapshot', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pairToken}` },
+      body: await file.text(),
+    });
+    if (!response.ok) throw new Error();
+    importedSnapshot = (await response.json()).latest;
+    render(importedSnapshot);
+  } catch { status.textContent = text('live.snapshotFailed'); }
+  finally { importing = false; }
+};
+returnLive.onclick = () => { importedSnapshot = null; snapshotFile.value = ''; rendered = null; void refresh(); };
 const unknown = (value) => value ?? text('live.unknown');
 const labeledCopy = (key, value) => {
   const row = el('div', undefined, 'copy-row');
@@ -59,6 +88,11 @@ const adviceErrors = {
   BGA_ADVICE_PAIRS: 'live.advicePairs',
   BGA_ADVICE_SETUP: 'live.adviceSetup',
   BGA_ADVICE_DRAFT_INCOMPLETE: 'live.adviceIncomplete',
+  BGA_ADVICE_CONTEXT: 'live.adviceContext',
+  BGA_ADVICE_TIME_ORDER: 'live.adviceTimeOrder',
+  BGA_ADVICE_FIGURES: 'live.adviceFigures',
+  BGA_ADVICE_DICE_SLOT: 'live.adviceDiceSlot',
+  BGA_ADVICE_TURN: 'live.adviceTurn',
   AI_MODEL_CONFIG_MISMATCH: 'live.adviceMismatch',
   AI_PYTHON_UNAVAILABLE: 'live.advicePython',
   AI_INFERENCE_TIMEOUT: 'live.adviceTimeout',
@@ -79,8 +113,31 @@ function renderAdvice(latest, connected) {
     el('p', text('live.adviceModel', { generation: Number(result.model.replace('generation-', '')) }), 'muted'));
   const effect = (gain) => text('live.effect', { amount: gain.amount, effect: text(`editor.effect.${gain.type}`) });
   const candidates = el('ol', undefined, 'candidates');
-  for (const candidate of result.candidates) {
+  for (const candidate of result.candidates.slice(0, result.scope === 'placement-root-only' ? 5 : undefined)) {
     const item = el('li');
+    if (result.scope === 'placement-root-only') {
+      const weight = (candidate.policyWeight * 100).toFixed(1);
+      if (candidate.kind === 'exchangeSeal') {
+        item.append(el('strong', text('live.adviceExchange', { amount: candidate.action.amount,
+          resource: candidate.action.resource ? text('live.exchangeResource', {
+            resource: text(`editor.effect.${candidate.action.resource}`) }) : '', weight })));
+      } else {
+        const target = candidate.target;
+        const room = /^floor([12])-([123])$/.exec(target.id ?? '');
+        const targetName = target.area === 'castle' ? text('live.targetCastle', { floor: room[1], room: room[2] })
+          : target.area === 'personal' ? text('live.targetPersonal', { row: text(`editor.effect.${target.row}`) })
+            : target.area === 'outside' ? text('live.targetOutside', { side: text(target.id === 'left' ? 'live.leftEnd' : 'live.rightEnd') })
+              : text('live.targetWell');
+        item.append(el('strong', text('live.advicePlacement', {
+          color: text(`live.${candidate.color === 'coral' ? 'red' : candidate.color}`),
+          side: text(candidate.action.side === 'left' ? 'live.leftEnd' : 'live.rightEnd'),
+          value: candidate.dieValue, target: targetName, weight })),
+        el('p', text('live.placementCost', { delta: candidate.coinDelta >= 0 ? `+${candidate.coinDelta}` : candidate.coinDelta,
+          lantern: text(candidate.lantern ? 'live.withLantern' : 'live.withoutLantern') }), 'muted'));
+      }
+      candidates.append(item);
+      continue;
+    }
     item.append(el('strong', text('live.adviceCandidate', { column: candidate.column,
       action: text(`editor.effect.${candidate.action}`), weight: (candidate.policyWeight * 100).toFixed(1) })),
     el('p', text('live.adviceGains', { gains: candidate.gains.map(effect).join('、') })),
@@ -88,7 +145,8 @@ function renderAdvice(latest, connected) {
     el('code', `${candidate.resourceId} + ${candidate.actionId}`));
     candidates.append(item);
   }
-  advice.append(candidates, el('p', text('live.adviceNotice'), 'muted'));
+  advice.append(candidates, el('p', text(result.scope === 'placement-root-only'
+    ? 'live.placementNotice' : 'live.adviceNotice'), 'muted'));
 }
 async function refreshTraining() {
   if (!adviceVersion || Date.now() - checkedTraining < 10_000) return;
@@ -157,7 +215,7 @@ function render(latest) {
   const download = el('button', text('live.export'));
   download.onclick = () => {
     const value = { format: 'whitecastle-bga-live-snapshot', version: 1,
-      receivedAt: current.watch.receivedAt, ...current.latest };
+      receivedAt: latest.changedAt, ...latest };
     const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
     const link = el('a');
     link.href = url;
@@ -169,10 +227,19 @@ function render(latest) {
   dashboard.append(check);
 }
 async function refresh() {
+  if (importing) return;
   try {
     const response = await fetch('/api/live/state');
     if (!response.ok) throw new Error('NETWORK');
     current = await response.json();
+    if (importedSnapshot) {
+      status.textContent = text('live.snapshotMode', { time: importedSnapshot.changedAt });
+      status.dataset.connected = 'false';
+      meta.textContent = text('live.updated', { table: importedSnapshot.source.table, seconds: '—', updates: 1 });
+      renderAdvice(importedSnapshot, true);
+      void refreshTraining();
+      return;
+    }
     const { watch, latest, updates } = current;
     const seconds = watch?.receivedAt ? Math.max(0, Math.floor((Date.now() - Date.parse(watch.receivedAt)) / 1000)) : null;
     const state = !watch ? 'live.waiting' : !watch.active ? 'live.stopped'
@@ -197,6 +264,14 @@ try {
   const config = await response.json();
   supported = config.assetVersion;
   adviceVersion = config.adviceVersion;
+  pairToken = config.token;
+  if (adviceVersion >= 3) {
+    const saved = await fetch('/api/live/snapshot');
+    if (saved.ok) {
+      importedSnapshot = (await saved.json()).latest;
+      if (importedSnapshot) render(importedSnapshot);
+    }
+  }
   setup.append(labeledCopy('live.address', location.origin),
     labeledCopy('live.folder', config.extensionPath), labeledCopy('live.pair', config.token));
   await refresh();

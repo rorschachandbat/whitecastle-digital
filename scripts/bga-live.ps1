@@ -18,7 +18,7 @@ for ($portAttempt = 0; $portAttempt -lt 10; $portAttempt++) {
         $occupied = $true
         $config = Invoke-RestMethod -Uri "$address/api/live/config" -TimeoutSec 2
         $running = $probe.format -eq 'whitecastle-bga-live-status' -and $config.extensionPath -eq $expectedExtension `
-            -and $config.adviceVersion -eq 1
+            -and $config.adviceVersion -eq 3
     } catch {}
     if ($running -or -not $occupied) { break }
     $Port += 2

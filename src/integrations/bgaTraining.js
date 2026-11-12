@@ -37,7 +37,7 @@ export function draftMatchFromBga(archive, catalog, mapping) {
 }
 
 /** 选牌摆设的共用适配器；调用方须先核验阶段及公开资料来源。 */
-export function buildBgaDraftSetup(data, catalog, mapping, { seed, playOrder = ['0', '1'] }) {
+export function buildBgaDraftSetup(data, catalog, mapping, { seed, playOrder = ['0', '1'], publicRemovedCards = [] }) {
   const mapped = (family, definition, side) => {
     const result = mapBgaDefinition(mapping, family, definition, side);
     if (typeof result !== 'string') fail('BGA_CARD_UNSUPPORTED');
@@ -92,7 +92,8 @@ export function buildBgaDraftSetup(data, catalog, mapping, { seed, playOrder = [
   });
   const castleDecks = Object.fromEntries([['steward', data.stewardCardsDeckCount], ['diplomat', data.diplomatCardsDeckCount]]
     .map(([family, count]) => {
-      const remaining = catalog.cards.filter((card) => card.kind === family && !rooms.some((room) => room.cardId === card.id))
+      const remaining = catalog.cards.filter((card) => card.kind === family && !rooms.some((room) => room.cardId === card.id)
+        && !publicRemovedCards.includes(card.id))
         .map((card) => card.id).sort();
       if (count !== remaining.length) fail('BGA_DECK_COUNT_UNSUPPORTED');
       return [family, remaining];

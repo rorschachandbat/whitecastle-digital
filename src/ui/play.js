@@ -200,7 +200,16 @@ function cardView(card, compact = false, tiles = []) {
   for (const field of card.fields ?? [card]) {
     const line = el('div', null, `card-field ${field.tone}`);
     const colors = tiles.filter((tile) => tile.fieldId === field.id).map((tile) => tile.color);
-    for (const color of colors) line.append(el('i', '●', `tile-dot ${color}`));
+    if (colors.length) {
+      const needs = el('span', null, 'color-needs');
+      needs.append(el('small', text('play.colorNeedLabel')));
+      for (const color of colors) {
+        const chip = el('span', text(`play.colorShort.${color}`), `color-chip ${color}`);
+        chip.title = text('play.colorNeed', { color: text(`play.colorShort.${color}`) });
+        needs.append(chip);
+      }
+      line.append(needs);
+    }
     if (card.kind === 'top') {
       line.append(el('small', text('play.slot', { slot: text(`play.slot.${field.id}`) })));
       const occupant = session?.match.state?.topSlots?.[field.id];
@@ -316,15 +325,53 @@ function targetButton(parent, id) {
       () => beginAction(candidate.action), 'target-button'));
   }
 }
-function diceOn(parent, id) {
-  for (const die of session.match.state.placements[id]?.dice ?? []) {
-    parent.append(el('span', text('play.placedDie', { n: Number(die.actor) + 1, value: die.value }), `placed-die p${die.actor}`));
+function dieColor(die) {
+  return ['coral', 'black', 'white'].includes(die?.sourceBridge) ? die.sourceBridge : 'unknown';
+}
+function dieToken(die) {
+  const color = dieColor(die);
+  const token = el('span', null, `die-token ${color}`);
+  token.append(el('strong', String(die.value)), el('small', text(`play.colorShort.${color}`)), el('small', text('play.placedBy', { n: Number(die.actor) + 1 })));
+  token.setAttribute('aria-label', text('play.placedDieColor', {
+    color: text(`play.colorShort.${color}`), value: die.value, n: Number(die.actor) + 1,
+  }));
+  return token;
+}
+function lastPlacementId() {
+  const action = session.match.actions.at(-1);
+  if (action?.type !== 'placeDie' || !action.target) return null;
+  if (action.target.area === 'personal') return `personal:${action.actor}:${action.target.row}`;
+  if (action.target.area === 'well') return 'well';
+  return `${action.target.area}:${action.target.id}`;
+}
+function occupancy(parent, id) {
+  const place = session.match.state.placements[id];
+  if (!place) return;
+  const dice = place.dice ?? [];
+  const fresh = id === lastPlacementId();
+  const row = el('div', null, 'occupancy');
+  if (dice.length) {
+    parent.classList.add('has-die');
+    row.append(el('span', text(fresh ? 'play.justPlaced' : 'play.slotTaken'), fresh ? 'slot-label fresh' : 'slot-label taken'));
+    for (const [index, die] of dice.entries()) {
+      const token = dieToken(die);
+      if (fresh && index === dice.length - 1) token.classList.add('just-placed');
+      row.append(token);
+    }
+  } else {
+    parent.classList.add('is-empty');
+    row.append(el('span', text('play.slotEmpty'), 'empty-slot'));
   }
+  parent.append(row);
 }
 function castleView() {
   const { state, config } = session.match;
   const castle = el('section', null, 'castle section-panel');
   castle.append(el('h2', text('play.castle')));
+  const legend = el('p', null, 'color-legend');
+  legend.append(el('span', text('play.colorLegend')));
+  for (const color of ['coral', 'black', 'white']) legend.append(el('span', text(`play.colorShort.${color}`), `color-chip ${color}`));
+  castle.append(legend);
   const top = el('div', null, 'top-room');
   top.append(el('h3', text('play.top')), cardView(byCard(state.topCardId), true));
   castle.append(top);
@@ -334,7 +381,7 @@ function castleView() {
       const node = el('article', null, 'room');
       node.append(el('h3', roomName(room.id)), el('small', text('play.compare', { n: state.placements[`castle:${room.id}`].comparisonValue })));
       node.append(cardView(config.cards.find((item) => item.id === room.cardId), true, room.tiles));
-      diceOn(node, `castle:${room.id}`);
+      occupancy(node, `castle:${room.id}`);
       targetButton(node, `castle:${room.id}`);
       const persons = Object.entries(state.players).flatMap(([id, player]) => player.figures.courtier
         .filter((figure) => figure.roomId === room.id).map(() => playerName(id)));
@@ -365,6 +412,7 @@ function bridgesView() {
       }, `die ${bridge.color} ${selectedDie?.bridgeId === bridge.id && selectedDie?.side === side ? 'selected' : ''}`);
       node.setAttribute('aria-label', `${text(`play.color.${bridge.color}`)} · ${side ? text(`play.${side}`) : text('play.middle')} · ${text('play.die', { value: die.value })}`);
       node.disabled = busy || opponentTurn() || side === null || match.phase !== 'playing' || Boolean(probe);
+      node.append(el('span', text(`play.colorShort.${bridge.color}`), 'die-color'));
       holder.append(node, el('small', side ? text(`play.${side}`) : text('play.middle')));
       dice.append(holder);
     }
@@ -407,7 +455,7 @@ function yardsView() {
     const key = id === 'well' ? 'play.well' : `play.outside.${id.split(':')[1]}`;
     node.append(el('h3', text(key)), el('small', text('play.compare', { n: state.placements[id].comparisonValue })));
     if (id === 'well') node.append(el('p', effects([{ type: 'seal', amount: 1 }, ...config.setup.wellRewards])));
-    diceOn(node, id);
+    occupancy(node, id);
     targetButton(node, id);
     utilities.append(node);
   }
@@ -427,7 +475,7 @@ function playersView() {
       line.append(el('h3', text('play.row', { name: effectName(row.figureType), n })),
         el('p', text('play.rowGains', { effects: effects([row.baseGain, ...row.revealedGains.slice(0, n)]) })),
         el('p', text('play.rowAction', { effects: effects(field.effects) }), 'muted'));
-      diceOn(line, `personal:${id}:${row.id}`);
+      occupancy(line, `personal:${id}:${row.id}`);
       targetButton(line, `personal:${id}:${row.id}`);
       node.append(line);
     }

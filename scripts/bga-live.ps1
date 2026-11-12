@@ -11,6 +11,8 @@ $running = $false
 $expectedExtension = Join-Path $projectRoot 'browser-extension/bga-live'
 # 旧版服务继续保留，新版自动选择相邻端口；不结束用户现有进程或其他工作副本。
 for ($portAttempt = 0; $portAttempt -lt 10; $portAttempt++) {
+    # 4190是浏览器禁用的Sieve端口，HTTP探测可成功但侧栏和扩展无法访问。
+    if ($Port -eq 4190) { $Port += 2 }
     $address = "http://127.0.0.1:$Port"
     $occupied = $false
     try {
@@ -18,7 +20,7 @@ for ($portAttempt = 0; $portAttempt -lt 10; $portAttempt++) {
         $occupied = $true
         $config = Invoke-RestMethod -Uri "$address/api/live/config" -TimeoutSec 2
         $running = $probe.format -eq 'whitecastle-bga-live-status' -and $config.extensionPath -eq $expectedExtension `
-            -and $config.adviceVersion -eq 3
+            -and $config.adviceVersion -eq 5
     } catch {}
     if ($running -or -not $occupied) { break }
     $Port += 2

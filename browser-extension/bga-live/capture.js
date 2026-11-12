@@ -47,6 +47,16 @@ function captureBgaDocument(root, { live = false } = {}) {
     progress: number(root.querySelector('#pr_gameprogression')),
     roundText: root.querySelector('#twc-main-game-panel-round-counter')?.textContent ?? null,
     title: root.querySelector('#pagemaintitletext')?.textContent ?? null,
+    decision: live ? {
+      description: root.querySelector('#twc-perform-action-additional-description')?.textContent ?? '',
+      buttons: [...root.querySelectorAll('#generalactions .action-button,#generalactions .jj-choose-action-button')]
+        .filter(visible).map((element) => ({
+          id: element.id, text: element.textContent.trim(), disabled: element.classList.contains('disabled'),
+          icons: [...element.querySelectorAll('[data-type]')].map((icon) => icon.dataset.type),
+        })),
+      targets: [...root.querySelectorAll('.bga-cards_selectable-card,.selectable')].filter(visible)
+        .filter((element) => element.id.startsWith('twc-')).map((element) => element.id),
+    } : null,
     draftPairs: draftPairs(),
     players: [...root.querySelectorAll('[id^="twc-player-panel-resources-"]')].filter(visible).map((element) => {
       const id = element.id.replace('twc-player-panel-resources-', '');

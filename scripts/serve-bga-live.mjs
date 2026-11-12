@@ -81,7 +81,7 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
       }
       if (url.pathname === '/api/live/config' && request.method === 'GET') {
         return json(200, { token, extensionPath: path.join(root, 'browser-extension/bga-live'),
-          assetVersion: mapping.gameAssetVersion, adviceVersion: 3 });
+          assetVersion: mapping.gameAssetVersion, adviceVersion: 5 });
       }
       if (url.pathname === '/api/live/state' && request.method === 'GET') {
         return json(200, { format: 'whitecastle-bga-live-status', workspaceRoot: root,

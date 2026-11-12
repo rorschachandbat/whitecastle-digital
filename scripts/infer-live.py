@@ -12,8 +12,9 @@ from ai_model import META_KEYS, infer, load_checkpoint
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--loop", type=Path, required=True)
+    parser.add_argument("--stream", action="store_true")
     args = parser.parse_args()
-    request = json.load(sys.stdin)
+    request = json.loads(sys.stdin.readline()) if args.stream else json.load(sys.stdin)
     state = json.loads((args.loop / "loop-state.json").read_text(encoding="utf-8"))
     if any(state["meta"].get(key) != request["meta"].get(key) for key in META_KEYS):
         raise ValueError("AI_MODEL_CONFIG_MISMATCH")
@@ -25,23 +26,32 @@ def main():
         raise ValueError("AI_CHAMPION_INVALID")
     torch.set_num_threads(2)
     model, _ = load_checkpoint(checkpoint_path, request["meta"])
-    observations = request.get("observations") or [request["observation"]]
-    if not 1 <= len(observations) <= 6:
-        raise ValueError("AI_FEATURE_SIZE")
-    policies = []
-    with torch.inference_mode():
-        for observation in observations:
-            if len(observation["state"]) != model.state_size or not observation["candidates"]:
-                raise ValueError("AI_FEATURE_SIZE")
-            if any(len(option) != model.option_size for option in observation["candidates"]):
-                raise ValueError("AI_FEATURE_SIZE")
-            logits, _ = infer(model, observation)
-            policies.append(logits.softmax(-1))
-        policy = torch.stack(policies).mean(0)
-    if not bool(torch.isfinite(policy).all()):
-        raise ValueError("AI_NONFINITE_POLICY")
-    print(json.dumps({"model": parts[-2], "source": "continuous-champion",
-                      "method": "policy-only", "policy": policy.tolist()}))
+    while True:
+        if any(state["meta"].get(key) != request["meta"].get(key) for key in META_KEYS):
+            raise ValueError("AI_MODEL_CONFIG_MISMATCH")
+        observations = request.get("observations") or [request["observation"]]
+        if not 1 <= len(observations) <= 12:
+            raise ValueError("AI_FEATURE_SIZE")
+        policies = []
+        with torch.inference_mode():
+            for observation in observations:
+                if len(observation["state"]) != model.state_size or not observation["candidates"]:
+                    raise ValueError("AI_FEATURE_SIZE")
+                if any(len(option) != model.option_size for option in observation["candidates"]):
+                    raise ValueError("AI_FEATURE_SIZE")
+                logits, _ = infer(model, observation)
+                policies.append(logits.softmax(-1))
+            policy = torch.stack(policies).mean(0)
+        if not bool(torch.isfinite(policy).all()):
+            raise ValueError("AI_NONFINITE_POLICY")
+        print(json.dumps({"model": parts[-2], "source": "continuous-champion",
+                          "method": "policy-only", "policy": policy.tolist()}), flush=True)
+        if not args.stream:
+            break
+        line = sys.stdin.readline()
+        if not line:
+            break
+        request = json.loads(line)
 
 
 if __name__ == "__main__":

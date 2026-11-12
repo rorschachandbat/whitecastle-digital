@@ -1,4 +1,4 @@
-import { text } from './StringTable.js';
+import { text, StringTable } from './StringTable.js';
 
 const el = (tag, value, className) => {
   const node = document.createElement(tag);
@@ -90,6 +90,8 @@ const adviceErrors = {
   BGA_ADVICE_DRAFT_INCOMPLETE: 'live.adviceIncomplete',
   BGA_ADVICE_CONTEXT: 'live.adviceContext',
   BGA_ADVICE_TIME_ORDER: 'live.adviceTimeOrder',
+  BGA_ADVICE_CHAIN_CONTEXT: 'live.adviceChainContext',
+  BGA_ADVICE_RESOURCE_PARTIAL: 'live.adviceResourcePartial',
   BGA_ADVICE_FIGURES: 'live.adviceFigures',
   BGA_ADVICE_DICE_SLOT: 'live.adviceDiceSlot',
   BGA_ADVICE_TURN: 'live.adviceTurn',
@@ -97,6 +99,39 @@ const adviceErrors = {
   AI_PYTHON_UNAVAILABLE: 'live.advicePython',
   AI_INFERENCE_TIMEOUT: 'live.adviceTimeout',
 };
+function chainText(choice) {
+  const effect = (value) => text('live.effect', { amount: value.amount, effect: text(`editor.effect.${value.type}`) });
+  if (choice.skip) return text('live.chainSkip');
+  if (choice.type === 'chooseResource') return text('live.chainResource', { resource: text(`editor.effect.${choice.resource}`) });
+  if (choice.type === 'gardener') return text('live.chainGardener', {
+    color: text(`live.bridge.${choice.bridgeId}`),
+    kind: text(choice.slot?.endsWith('-rock') ? 'live.gardenRock' : 'live.gardenPlant'), cost: choice.cost, card: choice.cardId,
+  });
+  if (choice.type === 'warrior') return text('live.chainWarrior', {
+    cost: choice.yardId?.replace('yard-cost-', ''),
+    order: choice.faceEffects?.map((effects) => effects.map(effect).join('、')).join(' → ') ?? '',
+  });
+  if (choice.type === 'effectOrder') return text('live.chainEffect', { effect: effect(choice.effect) });
+  if (choice.type === 'field') return text('live.chainField', { effects: (choice.effects ?? []).map(effect).join('、') });
+  if (choice.type === 'outside') return text('live.chainOutside', { action: text(`editor.effect.${choice.action}`) });
+  if (choice.type === 'domain') return text('live.targetPersonal', { row: text(`editor.effect.${choice.row}`) });
+  if (choice.type === 'exchangeSeal') return text('live.chainExchange', { amount: choice.amount,
+    resource: text(`editor.effect.${choice.resource ?? 'coin'}`) });
+  if (choice.type === 'castleOrder') return text('live.chainCastleOrder', {
+    order: choice.fieldIds.map((id) => text(`play.field.${id}`)).join(' → '),
+  });
+  if (choice.type === 'courtier') return text('live.chainCourtier', {
+    audience: text(choice.audience ? 'live.chainAudience' : 'live.chainNoAudience'),
+    destination: choice.promote ? text('live.chainPromotion', { from: choice.from?.roomId ?? text('live.chainGate'),
+      steps: choice.promote.steps, room: choice.promote.roomId ?? choice.promote.slotId }) : text('live.chainNoPromotion'),
+    order: choice.audience && choice.promote ? text(choice.order?.[0] === 'promote'
+      ? 'play.orderPromoteFirst' : 'play.orderAudienceFirst') : '',
+  });
+  if (choice.type === 'influence') return text(choice.pay ? 'live.chainPayGate' : 'live.chainDeclineGate');
+  return text('live.chainNamed', { action: `editor.effect.${choice.type}` in StringTable
+    ? text(`editor.effect.${choice.type}`) : text('live.chainOther'),
+    target: [choice.roomId, choice.fieldId].filter(Boolean).join(' / ') });
+}
 function renderAdvice(latest, connected) {
   advice.replaceChildren(el('h2', text('live.next')));
   if (!adviceVersion) { advice.append(el('p', text('live.restart'))); return; }
@@ -115,6 +150,13 @@ function renderAdvice(latest, connected) {
   const candidates = el('ol', undefined, 'candidates');
   for (const candidate of result.candidates.slice(0, result.scope === 'placement-root-only' ? 5 : undefined)) {
     const item = el('li');
+    if (result.scope === 'live-chain') {
+      item.append(el('strong', chainText(candidate)), el('p', text('live.chainWeight', {
+        weight: (candidate.policyWeight * 100).toFixed(1),
+      }), 'muted'));
+      candidates.append(item);
+      continue;
+    }
     if (result.scope === 'placement-root-only') {
       const weight = (candidate.policyWeight * 100).toFixed(1);
       if (candidate.kind === 'exchangeSeal') {
@@ -145,8 +187,17 @@ function renderAdvice(latest, connected) {
     el('code', `${candidate.resourceId} + ${candidate.actionId}`));
     candidates.append(item);
   }
-  advice.append(candidates, el('p', text(result.scope === 'placement-root-only'
-    ? 'live.placementNotice' : 'live.adviceNotice'), 'muted'));
+  advice.append(candidates);
+  if (result.plan?.steps.length) {
+    const steps = el('ol');
+    result.plan.steps.forEach((step) => steps.append(el('li', chainText(step))));
+    advice.append(el('h3', text('live.chainPlan')), el('p', text('live.chainConditional'), 'muted'), steps);
+  }
+  if (result.plan?.boundary === 'unknown-reveal') advice.append(el('p', text('live.chainReveal'), 'muted'));
+  if (result.plan?.boundary === 'decision-limit') advice.append(el('p', text('live.chainLimit'), 'muted'));
+  if (result.uncertainties?.includes('time-arrival-order')) advice.append(el('p', text('live.timeUncertainty'), 'muted'));
+  advice.append(el('p', text(result.scope === 'starting-draft-only'
+    ? 'live.adviceNotice' : 'live.placementNotice'), 'muted'));
 }
 async function refreshTraining() {
   if (!adviceVersion || Date.now() - checkedTraining < 10_000) return;

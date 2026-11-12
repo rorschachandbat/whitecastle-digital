@@ -7,7 +7,8 @@ import { prepareLiveAdvice } from '../src/integrations/bgaLiveAdvice.js';
 import { mapBgaDefinition } from '../src/integrations/bgaReplay.js';
 import { loadTrainingConfig } from '../scripts/ai-common.mjs';
 import { createLiveAi } from '../scripts/bga-live-ai.mjs';
-import { rememberLiveContext, preparePlayingAdvice } from '../src/integrations/bgaLivePlaying.js';
+import { rememberLiveContext, preparePlayingAdvice, getPlayingSession } from '../src/integrations/bgaLivePlaying.js';
+import { prepareChainAdvice, advancePublic } from '../src/integrations/bgaLiveChain.js';
 import { chooseStartingPair } from '../src/engine/startingDraft.js';
 import { buildLiveBoard } from '../src/integrations/bgaLiveAdvice.js';
 
@@ -208,7 +209,7 @@ test('普通放骰还原双方回合、占位和公开牌背，保持主模型�
   assert.equal(preparePlayingAdvice(latest, { ...parameters, context }).actor, '100');
 });
 
-test('普通放骰不使用未来日志，缺上下文、跨桌、未来事实、错回合、时间轨和连锁拒绝', () => {
+test('普通放骰不使用未来日志，缺上下文、跨桌、未来事实、错回合和无效时间轨拒绝', () => {
   const { latest, context } = playingFixture();
   const before = preparePlayingAdvice(latest, { ...parameters, context });
   latest.archive.history = [{ future: 'future-card' }];
@@ -219,7 +220,7 @@ test('普通放骰不使用未来日志，缺上下文、跨桌、未来事实�
     [(v) => { v.source.table = '456'; }, 'BGA_ADVICE_CONTEXT'],
     [(v, c) => { c.seenAt += 3600_000; }, 'BGA_ADVICE_CONTEXT'],
     [(v) => { v.observation.title = '乙 必须从桥上选择一个骰子并将它放在一个行动位置上'; }, 'BGA_ADVICE_TURN'],
-    [(v) => { v.archive.publicPosition.pieces.find((piece) => piece.type === 'influence').slot = 'influence-1'; }, 'BGA_ADVICE_TIME_ORDER'],
+    [(v) => { v.archive.publicPosition.pieces.find((piece) => piece.type === 'influence').slot = 'influence-21'; }, 'BGA_ADVICE_TIME_ORDER'],
     [(v) => { v.observation.title = '甲 必须选择一项城堡行动'; }, 'BGA_ADVICE_PHASE'],
     [(v) => { v.archive.publicPosition.dice[0].slot = 'unknown'; }, 'BGA_ADVICE_DICE_SLOT'],
   ]) {
@@ -228,6 +229,136 @@ test('普通放骰不使用未来日志，缺上下文、跨桌、未来事实�
     change(v, c);
     assert.throws(() => preparePlayingAdvice(v, { ...parameters, context: c }), { code });
   }
+});
+
+test('第二三轮、非原点时间轨、真实城外格和大名槽可编码，未知优先顺序显式平均', () => {
+  for (const round of [2, 3]) {
+    const { latest, context } = playingFixture();
+    const p = latest.archive.publicPosition;
+    p.roundText = `第 ${round} / 3 轮次`;
+    p.pieces.find((piece) => piece.type === 'influence').slot = 'influence-4';
+    p.dice[0].slot = 'action-space-main-board-outside-the-walls-2';
+    const courtier = p.pieces.find((piece) => piece.type === 'courtier');
+    courtier.containers = ['twc-daimyo-courtier-stock'];
+    courtier.slot = '2';
+    const prepared = preparePlayingAdvice(latest, { ...parameters, context });
+    assert.equal(prepared.observation.state[4], round / 3);
+    assert.equal(prepared.observations.length, 12);
+    assert.deepEqual(prepared.uncertainties, ['time-arrival-order']);
+    const { env } = getPlayingSession(prepared);
+    assert.equal(env.match.state.players['0'].timePosition, 4);
+    assert.equal(env.match.state.players['0'].finalOrder, 0);
+    assert.equal(Object.keys(env.match.state.topSlots).length, 1);
+    assert.equal(env.match.state.placements['outside:right'].dice.length, 1);
+    assert.equal(prepared.candidates.some((candidate) => candidate.target?.area === 'outside'
+      && candidate.target.id === 'right'), false);
+    p.dice[0].slot = 'action-space-player-101-1';
+    const personal = getPlayingSession(preparePlayingAdvice(latest, { ...parameters, context })).env;
+    assert.equal(personal.match.state.placements['personal:1:courtier'].dice.length, 1);
+  }
+});
+
+function chainFixture(type) {
+  const { latest, context } = playingFixture();
+  // 先让公开资源足以测试不同目标，不依赖随机开局的个人资源分配。
+  latest.archive.publicPosition.players[0].resources.food = 7;
+  if (type === 'chooseResource') {
+    latest.archive.publicPosition.players[0].resources.food = 3;
+    latest.archive.publicPosition.dieTiles.filter((tile) => tile.side === 'back')
+      .forEach((tile, index) => { tile.reward = index ? 'coin' : 'chooseResource'; });
+  }
+  let selected;
+  const prepared = preparePlayingAdvice(latest, { ...parameters, context });
+  for (let index = 0; index < prepared.candidates.length && !selected; index += 1) {
+    const candidate = prepared.candidates[index];
+    if (candidate.kind !== 'placeDie' || candidate.action.side !== 'right'
+      || (type === 'gardener' ? candidate.target.area !== 'outside' || candidate.target.id !== 'left'
+        : candidate.target.area !== 'well')) continue;
+    const value = preparePlayingAdvice(latest, { ...parameters, context });
+    const { env } = getPlayingSession(value);
+    if (!advancePublic(env, index)) continue;
+    for (let depth = 0; env.pending && depth < 8; depth += 1) {
+      if (env.probe.request.type === type) { selected = { env, index }; break; }
+      const options = env.getLegalActions();
+      const next = options.findIndex((option) => option.next?.status !== 'public-chance' && !option.value?.skip
+        && (env.probe.request.type !== 'outside' || option.value.action === 'gardener'));
+      if (next < 0 || !advancePublic(env, next)) break;
+    }
+  }
+  assert.ok(selected, type);
+  const { env, index } = selected;
+  const updated = rememberLiveContext(context, latest, parameters);
+  const current = structuredClone(latest);
+  current.changedAt = '2026-11-12T01:02:00Z';
+  current.observation.title = '甲 必须执行行动';
+  const p = current.archive.publicPosition;
+  const request = env.probe.request;
+  const actor = p.players.find((player) => player.seat === env.actor);
+  actor.resources = { ...request.player.resources };
+  actor.displayedScore = request.player.resources.points;
+  p.pieces.find((piece) => piece.owner === env.actor && piece.type === 'influence').slot = `influence-${request.player.timePosition}`;
+  const action = prepared.candidates[index].action;
+  const die = p.dice.find((item) => item.slot === `${action.bridgeId === 'coral' ? 'red' : action.bridgeId}-${action.side}`);
+  die.slot = action.target.area === 'castle' ? `action-space-main-board-${action.target.id.startsWith('floor1') ? 'steward' : 'diplomat'}-${action.target.id.split('-')[1]}`
+    : action.target.area === 'outside' ? `action-space-main-board-outside-the-walls-${action.target.id === 'left' ? 1 : 2}`
+      : action.target.area === 'personal' ? `action-space-player-board-${actor.platformId}-${action.target.row}`
+        : 'action-space-main-board-well';
+  // 模拟取骰动画结束后桥端重新标注。
+  for (const color of ['red', 'black', 'white']) {
+    const remaining = p.dice.filter((item) => item.slot.startsWith(`${color}-`));
+    if (remaining.length === 2) remaining.forEach((item, i) => { item.slot = `${color}-${i ? 'right' : 'left'}`; });
+  }
+  current.observation.decision = {
+    buttons: type === 'chooseResource' ? ['food', 'iron', 'pearl'].map((resource) =>
+      ({ id: `twc-perform-action-${resource}`, disabled: false, icons: [] })) : [{ id: 'jj-perform-skip', disabled: false, icons: [] }],
+    targets: type === 'gardener' ? p.cards.filter((card) => card.family === 'garden').map((card) => card.instance) : [],
+  };
+  // 使用真实网站的花园实例标识格式。
+  if (type === 'gardener') {
+    p.cards.filter((card) => card.family === 'garden').forEach((card, i) => { card.instance = `twc-garden-card-${i + 1}`; });
+    current.observation.decision.targets = p.cards.filter((card) => card.family === 'garden').map((card) => card.instance);
+  }
+  return { current, context: updated };
+}
+
+test('真实放骰后公开状态与可见园丁目标唯一匹配才提供连锁；资源不一致时拒绝', () => {
+  const { current, context } = chainFixture('gardener');
+  const result = prepareChainAdvice(current, { ...parameters, context });
+  assert.equal(result.scope, 'live-chain');
+  assert.equal(result.observation.request, 'gardener');
+  assert.ok(result.candidates.some((candidate) => candidate.type === 'gardener' && candidate.cardId));
+  current.archive.publicPosition.players[0].resources.coin += 1;
+  assert.throws(() => prepareChainAdvice(current, { ...parameters, context }), { code: 'BGA_ADVICE_CHAIN_CONTEXT' });
+});
+
+test('资源连锁接入同一主编码；已点选部分资源不会当作未选择重复建议', () => {
+  const { current, context } = chainFixture('chooseResource');
+  const result = prepareChainAdvice(current, { ...parameters, context });
+  assert.equal(result.observation.request, 'chooseResource');
+  assert.equal(result.observation.state.length, 2345);
+  assert.deepEqual(result.candidates.map((candidate) => candidate.resource), ['food', 'iron', 'pearl']);
+  current.observation.decision.buttons.push({ id: 'twc-perform-action-confirm', disabled: true, icons: ['food', 'resource'] });
+  assert.throws(() => prepareChainAdvice(current, { ...parameters, context }), { code: 'BGA_ADVICE_RESOURCE_PARTIAL' });
+});
+
+test('谒见并晋升已有家臣时按其真实楼层判断未知补牌边界', () => {
+  const { latest, context } = playingFixture();
+  const p = latest.archive.publicPosition;
+  p.players[0].resources.coin = 7;
+  p.players[0].resources.pearl = 7;
+  p.pieces.find((piece) => piece.type === 'courtier' && piece.owner === '0').containers =
+    ['twc-castle-room-main-board-steward-1-courtier-stock'];
+  const prepared = preparePlayingAdvice(latest, { ...parameters, context });
+  const { env } = getPlayingSession(prepared);
+  const rootIndex = prepared.candidates.findIndex((candidate) => candidate.kind === 'placeDie'
+    && candidate.action.side === 'right' && candidate.target.area === 'outside' && candidate.target.id === 'left');
+  assert.ok(advancePublic(env, rootIndex));
+  assert.ok(advancePublic(env, env.getLegalActions().findIndex((option) => option.value?.action === 'courtier')));
+  assert.equal(env.probe.request.type, 'courtier');
+  const climb = (steps) => env.getLegalActions().find((option) => option.value?.audience
+    && option.value.promote?.figureIndex === 0 && option.value.promote.steps === steps);
+  assert.equal(climb(1).next.status, 'public-chance');
+  assert.notEqual(climb(2).next.status, 'public-chance');
 });
 
 test('公开上下文不会由后采样覆盖过去，可见背面不抹除曾见正面', () => {

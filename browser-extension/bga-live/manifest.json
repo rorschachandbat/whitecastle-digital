@@ -3,7 +3,7 @@
   "name": "__MSG_appName__",
   "description": "__MSG_description__",
   "default_locale": "zh_CN",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["http://127.0.0.1/*"],
   "background": { "service_worker": "background.js", "type": "module" },

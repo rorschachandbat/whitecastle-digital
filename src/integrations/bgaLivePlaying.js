@@ -16,6 +16,38 @@ const rows = { courtier: 'courtiers', gardener: 'gardeners', warrior: 'warriors'
 const timestamp = (latest) => Date.parse(latest.changedAt ?? latest.receivedAt ?? '');
 const identity = (latest) => JSON.stringify([latest.source.table, latest.source.gameAssetVersion,
   latest.archive.publicPosition.players.map((player) => player.platformId).sort()]);
+const sessions = new WeakMap();
+const permutations = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+export const isPlacementTitle = (title, subject) => [
+  `${subject} 必须从桥上选择一个骰子并将它放在一个行动位置上`,
+  `${subject} 必须从桥中选择一个骰子，并将其放置在一个行动上`,
+].includes(title?.trim());
+export const getPlayingSession = (prepared) => sessions.get(prepared);
+
+/** 缺少历史到达次序时，对两种时间优先关系平均；不把任意关系当作已知事实。 */
+export function publicObservations(env, uncertainPriority) {
+  const observation = env.observe();
+  const original = env.match.draft.pairs;
+  const state = env.probe?.request?.state ?? env.match.state;
+  const players = [state.players['0'], state.players['1']];
+  const priorities = players.map((player) => player.timePriority);
+  const requestPlayer = env.probe?.request?.player;
+  const requestPriority = requestPlayer?.timePriority;
+  const observations = [];
+  const unresolved = uncertainPriority && [...priorities, requestPriority ?? 0].every((priority) => priority <= 2);
+  for (const order of unresolved ? [[1, 2], [2, 1]] : [priorities]) {
+    players.forEach((player, index) => { player.timePriority = order[index]; });
+    if (requestPlayer && unresolved) requestPlayer.timePriority = order[Number(env.actor)];
+    for (const indices of permutations) {
+      env.match.draft.pairs = indices.map((index) => original[index]);
+      observations.push({ ...observation, state: encodeState(env) });
+    }
+  }
+  env.match.draft.pairs = original;
+  players.forEach((player, index) => { player.timePriority = priorities[index]; });
+  if (requestPlayer) requestPlayer.timePriority = requestPriority;
+  return observations;
+}
 
 /** 按时间保存已经公开的事实。牌背不覆盖曾见正面，桌号及玩家变更后重新收集。 */
 export function rememberLiveContext(previous, latest, parameters) {
@@ -69,6 +101,16 @@ export function rememberLiveContext(previous, latest, parameters) {
     } catch {}
   }
   context.seenAt = timestamp(latest);
+  if (isPlacementTitle(latest.observation.title, '你')
+    || latest.observation.players?.some((player) => isPlacementTitle(latest.observation.title, player.name))) {
+    try {
+      // 连锁只从已校验的放骰前状态重建，动画中标题残留不能覆盖有效根局面。
+      preparePlayingAdvice(latest, { ...parameters, context });
+      context.root = structuredClone(latest);
+      delete context.root.recommendations;
+      context.rootFaces = structuredClone(context.faces);
+    } catch {}
+  }
   return context;
 }
 
@@ -77,7 +119,8 @@ class PublicRootEnvironment extends TrainingEnvironment {
   probeChoice(probe, value) {
     if (value?.promote) {
       const figure = probe.request.player.figures.courtier[value.promote.figureIndex];
-      const floor = value.audience ? 0 : ['gate', 'floor1', 'floor2', 'floor3'].indexOf(figure?.location);
+      const floor = ['gate', 'floor1', 'floor2', 'floor3'].indexOf(figure?.location
+        ?? (value.audience && value.promote.figureIndex === probe.request.player.figures.courtier.length ? 'gate' : null));
       const destination = floor + value.promote.steps;
       const family = destination === 1 ? 'steward' : 'diplomat';
       if (destination < 3 && probe.request.state.castleDecks[family]?.length) return { status: 'public-chance' };
@@ -98,10 +141,7 @@ export function preparePlayingAdvice(latest, { catalog, mapping, weights, contex
     || catalog.revision !== mapping.catalogRevision) fail('BGA_ADVICE_MAPPING');
   const p = latest.archive.publicPosition;
   const round = /^(?:第\s*)?([123])\s*\/\s*3\s*轮次$/.exec(p.roundText ?? '');
-  const rootTitle = (subject) => [
-    `${subject} 必须从桥上选择一个骰子并将它放在一个行动位置上`,
-    `${subject} 必须从桥中选择一个骰子，并将其放置在一个行动上`,
-  ].includes(latest.observation.title?.trim());
+  const rootTitle = (subject) => isPlacementTitle(latest.observation.title, subject);
   let actors = latest.observation.players.filter((player) => rootTitle(player.name));
   if (!round || (!rootTitle('你') && actors.length !== 1) || p.players.length !== 2 || p.progress === 100) {
     fail('BGA_ADVICE_PHASE');
@@ -178,6 +218,9 @@ export function preparePlayingAdvice(latest, { catalog, mapping, weights, contex
             const roomId = `floor${room[1] === 'steward' ? 1 : 2}-${room[2]}`;
             if (!match.config.setup.castleRooms.some((item) => item.id === roomId)) fail('BGA_ADVICE_FIGURES');
             figures.courtier.push({ location: room[1] === 'steward' ? 'floor1' : 'floor2', roomId });
+          } else if (inside(piece, 'twc-daimyo-courtier-stock') && /^[123]$/.test(piece.slot)) {
+            const top = match.config.cards.find((card) => card.id === match.config.setup.topCardId);
+            figures.courtier.push({ location: 'floor3', slotId: top.fields[Number(piece.slot) - 1].id });
           } else if (piece.containers.some((container) => container.includes('-gate'))) figures.courtier.push({ location: 'gate' });
           else fail('BGA_ADVICE_FIGURES');
         } else if (type === 'warrior') {
@@ -192,13 +235,13 @@ export function preparePlayingAdvice(latest, { catalog, mapping, weights, contex
     }
     const influence = one(p.pieces.filter((piece) => piece.owner === seat && piece.type === 'influence'));
     const time = /^influence-(\d+)$/.exec(influence.slot);
-    // 尚未捕获时间轨同格叠放顺序，先仅开放首轮、双方仍在原点的可核验局面。
-    if (Number(round[1]) !== 1 || !time || Number(time[1]) !== 0) fail('BGA_ADVICE_TIME_ORDER');
+    if (!time || Number(time[1]) > 20) fail('BGA_ADVICE_TIME_ORDER');
     const current = one(own(player, 'action'));
     if (current.faceDown || !current.localId) fail('BGA_ADVICE_SETUP');
     return { resources: { ...player.resources, points: player.displayedScore }, figures,
       currentCard: localCard(current), lanternCards: own(player, 'lantern').map(localCard),
-      timePosition: 0, timePriority: 2 - playOrder.indexOf(seat) };
+      timePosition: Number(time[1]), timePriority: 2 - playOrder.indexOf(seat),
+      ...(Number(round[1]) > 1 ? { finalOrder: playOrder.indexOf(seat) } : {}) };
   });
   match.config.setup.players = players;
   for (const family of ['steward', 'diplomat']) {
@@ -208,6 +251,14 @@ export function preparePlayingAdvice(latest, { catalog, mapping, weights, contex
   match.state = createPosition(match.config);
   match.phase = 'playing';
   const state = match.state;
+  state.round = Number(round[1]);
+  for (const [seat, player] of Object.entries(state.players)) {
+    for (const [figureIndex, figure] of player.figures.courtier.entries()) {
+      if (figure.location !== 'floor3') continue;
+      if (state.topSlots[figure.slotId]) fail('BGA_ADVICE_FIGURES');
+      state.topSlots[figure.slotId] = { actor: seat, figureIndex };
+    }
+  }
   state.activePlayer = actor;
   state.mode = 'local-practice';
   state.timeSequence = 2;
@@ -230,13 +281,17 @@ export function preparePlayingAdvice(latest, { catalog, mapping, weights, contex
   for (const die of p.dice.filter((item) => !remaining.has(item.instance))) {
     let id;
     const castle = /^action-space-main-board-(steward|diplomat)-([123])$/.exec(die.slot);
-    const personal = /^action-space-player-board-(\d+)-(courtier|warrior|gardener)$/.exec(die.slot);
+    const personal = /^action-space-player-(?:board-)?(\d+)-(courtier|warrior|gardener|[123])$/.exec(die.slot);
     if (castle) id = `castle:floor${castle[1] === 'steward' ? 1 : 2}-${castle[2]}`;
-    else if (personal) id = `personal:${one(p.players.filter((player) => player.platformId === personal[1])).seat}:${personal[2]}`;
+    else if (personal) id = `personal:${one(p.players.filter((player) => player.platformId === personal[1])).seat}:${{
+      1: 'courtier', 2: 'gardener', 3: 'warrior',
+    }[personal[2]] ?? personal[2]}`;
     else if (die.slot === 'action-space-main-board-well') id = 'well';
     else {
       const outside = /^action-space-main-board-outside-(left|right)$/.exec(die.slot);
+      const numbered = /^action-space-main-board-outside-the-walls-([12])$/.exec(die.slot);
       if (outside) id = `outside:${outside[1]}`;
+      if (numbered) id = `outside:${numbered[1] === '1' ? 'left' : 'right'}`;
     }
     const place = state.placements[id];
     if (!place || place.capacity !== null && place.dice.length >= place.capacity) fail('BGA_ADVICE_DICE_SLOT');
@@ -249,14 +304,10 @@ export function preparePlayingAdvice(latest, { catalog, mapping, weights, contex
   state.configSignature = canonicalCatalog(match.config);
   const env = new PublicRootEnvironment(catalog, weights);
   const observation = env.initialize(match);
-  // 部分旧快照缺少起始牌的横向顺序；平均六种槽位排列，避免任意补序影响建议。
-  const originalPairs = match.draft.pairs;
-  const observations = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]].map((indices) => {
-    match.draft.pairs = indices.map((index) => originalPairs[index]);
-    return { ...observation, state: encodeState(env) };
-  });
-  match.draft.pairs = originalPairs;
-  return { observation, observations, actor: actors[0].id, scope: 'placement-root-only',
+  const uncertainPriority = state.round > 1 || players.some((player) => player.timePosition > 0);
+  const observations = publicObservations(env, uncertainPriority);
+  const result = { observation, observations, actor: actors[0].id, scope: 'placement-root-only',
+    uncertainties: uncertainPriority ? ['time-arrival-order'] : [],
     candidates: env.getLegalActions().map((option) => {
       const action = option.action;
       if (action.type !== 'placeDie') return { action, kind: 'exchangeSeal' };
@@ -268,4 +319,6 @@ export function preparePlayingAdvice(latest, { catalog, mapping, weights, contex
         coinDelta: die.value - state.placements[placeId].comparisonValue,
         lantern: action.side === 'left', target: action.target };
     }) };
+  sessions.set(result, { env, uncertainPriority });
+  return result;
 }

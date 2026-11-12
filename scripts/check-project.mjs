@@ -43,7 +43,8 @@ const sourceFiles = [
   'src/ui/bgaReplay.js', 'src/integrations/bgaDom.js', 'src/integrations/bgaReplay.js',
   'scripts/import-bga-replay.mjs',
   'src/integrations/bgaLive.js', 'src/ui/bgaLive.js', 'scripts/serve-bga-live.mjs',
-  'src/integrations/bgaLiveAdvice.js', 'src/integrations/bgaLivePlaying.js', 'src/integrations/bgaTraining.js', 'scripts/bga-live-ai.mjs',
+  'src/integrations/bgaLiveAdvice.js', 'src/integrations/bgaLivePlaying.js', 'src/integrations/bgaLiveChain.js',
+  'src/integrations/bgaTraining.js', 'scripts/bga-live-ai.mjs',
   ...['capture.js', 'background.js', 'watcher.js', 'popup.js', 'StringTable.js']
     .map((name) => `browser-extension/bga-live/${name}`),
 ];

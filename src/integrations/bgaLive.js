@@ -37,6 +37,15 @@ export function sanitizeLiveCapture(payload) {
       gameAssetVersion: /^\d{6}-\d{4}$/.test(source.gameAssetVersion ?? '') ? source.gameAssetVersion : null },
     observation: { format: observation.format, version: 1, cursor: count(observation.cursor),
       progress: count(observation.progress), title: cleanText(observation.title),
+      decision: observation.decision ? {
+        description: cleanText(observation.decision.description, 600),
+        buttons: Array.isArray(observation.decision.buttons) ? observation.decision.buttons.slice(0, 60).map((button) => ({
+          id: cleanText(button.id, 180), text: cleanText(button.text, 600), disabled: button.disabled === true,
+          icons: Array.isArray(button.icons) ? button.icons.slice(0, 60).map((icon) => cleanText(icon, 80)) : [],
+        })) : [],
+        targets: Array.isArray(observation.decision.targets)
+          ? observation.decision.targets.slice(0, 150).map((id) => cleanText(id, 180)) : [],
+      } : null,
       draftPairs: Array.isArray(observation.draftPairs) && observation.draftPairs.length <= 3
         ? observation.draftPairs.map((pair) => pick(pair, ['resource', 'action'])) : [],
       roundText: cleanText(observation.roundText, 100), players, cards: items('cards'),

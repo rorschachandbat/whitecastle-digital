@@ -69,6 +69,20 @@ def load_checkpoint(path, expected_meta=None):
     return model, checkpoint
 
 
+def load_frozen_checkpoint(path, current_meta):
+    """固定对手只忽略摆色版本；编码、目录和启发式仍必须相同。"""
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    for key in META_KEYS:
+        if key == "setupVersion":
+            continue
+        if checkpoint["meta"].get(key) != current_meta.get(key):
+            raise ValueError(f"AI_FROZEN_OPPONENT_MISMATCH:{key}")
+    model = PolicyValue(checkpoint["state_size"], checkpoint["option_size"])
+    model.load_state_dict(checkpoint["model"])
+    model.eval()
+    return model, checkpoint
+
+
 class RulesProcess:
     def __init__(self, catalog=None, weights=None):
         command = ["node", str(ROOT / "scripts/ai-env-server.mjs")]

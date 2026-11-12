@@ -12,5 +12,6 @@
   "guideRegressionTolerance": 0.05,
   "historySize": 6,
   "threads": 2,
-  "maxDiskGB": 4
+  "maxDiskGB": 4,
+  "frozenOpponent": ".local/ai/continuous-r4/generation-00117/candidate.pt"
 }

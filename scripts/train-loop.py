@@ -93,7 +93,12 @@ def promotion(candidate, baseline, config):
         reasons.append("champion-score-margin")
     if guide["winRate"] + config["guideRegressionTolerance"] < previous["winRate"]:
         reasons.append("guide-regression")
-    return {"promoted": not reasons, "reasons": reasons, "selectionOnly": True}
+    result = {"promoted": not reasons, "reasons": reasons, "selectionOnly": True}
+    if "frozen" in candidate.get("summary", {}):
+        result["frozen"] = candidate["summary"]["frozen"]
+        if "frozen" in baseline.get("summary", {}):
+            result["championFrozen"] = baseline["summary"]["frozen"]
+    return result
 
 
 def disk_bytes(folder):
@@ -226,14 +231,21 @@ def main():
                 atomic_json(state_path, state)
                 candidate_report = current / "evaluation.json"
                 baseline_report = current / "champion-evaluation.json"
+                frozen = config.get("frozenOpponent")
+                frozen_path = (ROOT / frozen).resolve() if frozen and not Path(frozen).is_absolute() else Path(frozen) if frozen else None
+                if frozen_path and not frozen_path.is_file():
+                    raise ValueError("AI_FROZEN_OPPONENT_MISSING")
+                candidate_opponents = ("guide", "imitation", "frozen") if frozen_path else ("guide", "imitation")
+                baseline_opponents = ("guide", "frozen") if frozen_path else ("guide",)
                 if not candidate_report.exists():
                     EVAL.evaluate(candidate_path, candidate_report, config["evaluationPairs"],
-                                  ("guide", "imitation"), state["champion"], prefix,
-                                  config.get("catalog"), config.get("weights"), stop=stop)
+                                  candidate_opponents, state["champion"], prefix,
+                                  config.get("catalog"), config.get("weights"), stop=stop,
+                                  frozen_path=frozen_path)
                 if not baseline_report.exists():
                     EVAL.evaluate(state["champion"], baseline_report, config["evaluationPairs"],
-                                  ("guide",), prefix=prefix, catalog=config.get("catalog"),
-                                  weights=config.get("weights"), stop=stop)
+                                  baseline_opponents, prefix=prefix, catalog=config.get("catalog"),
+                                  weights=config.get("weights"), stop=stop, frozen_path=frozen_path)
                 result = promotion(read(candidate_report), read(baseline_report), config)
                 state["latest"] = str(candidate_path)
                 if result["promoted"]:

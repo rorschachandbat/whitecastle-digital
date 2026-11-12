@@ -9,7 +9,7 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from ai_model import PolicyValue, batch_tensors, load_checkpoint, save_checkpoint
+from ai_model import PolicyValue, batch_tensors, load_checkpoint, load_frozen_checkpoint, save_checkpoint
 
 SPEC = importlib.util.spec_from_file_location("train_policy", ROOT / "scripts/train-policy.py")
 TRAIN = importlib.util.module_from_spec(SPEC)
@@ -51,6 +51,17 @@ class ModelTests(unittest.TestCase):
             save_checkpoint(path, model, {key: value for key, value in meta.items() if key != "encoderHash"})
             with self.assertRaisesRegex(ValueError, "CONFIG_MISMATCH:encoderHash"):
                 load_checkpoint(path, meta)
+
+    def test_frozen_opponent_ignores_only_setup_version(self):
+        meta = {key: "v1" for key in TRAIN.META_KEYS}
+        meta["setupVersion"] = "room-colors-v1"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "old.pt"
+            save_checkpoint(path, PolicyValue(2, 2), meta)
+            current = {**meta, "setupVersion": "room-colors-v2"}
+            load_frozen_checkpoint(path, current)
+            with self.assertRaisesRegex(ValueError, "FROZEN_OPPONENT_MISMATCH:encoderHash"):
+                load_frozen_checkpoint(path, {**current, "encoderHash": "changed"})
 
 
 if __name__ == "__main__":

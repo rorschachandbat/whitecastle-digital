@@ -8,7 +8,7 @@ from pathlib import Path
 
 import torch
 
-from ai_model import ROOT, RulesProcess, infer, load_checkpoint
+from ai_model import ROOT, RulesProcess, infer, load_checkpoint, load_frozen_checkpoint
 
 
 def wilson(wins, games):
@@ -20,13 +20,16 @@ def wilson(wins, games):
 
 
 def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitation_path=None,
-             prefix="ai-eval-v1", catalog=None, weights=None, forbidden_seeds=(), stop=None):
+             prefix="ai-eval-v1", catalog=None, weights=None, forbidden_seeds=(), stop=None,
+             frozen_path=None):
     """评估种子只作选模用途；调用方负责保留最终一次性测试集。"""
     output = Path(output)
     if output.exists():
         raise ValueError("AI_OUTPUT_EXISTS")
-    if pairs < 1 or not opponents or any(item not in ("random", "guide", "imitation") for item in opponents):
+    if pairs < 1 or not opponents or any(item not in ("random", "guide", "imitation", "frozen") for item in opponents):
         raise ValueError("AI_BAD_EVALUATION")
+    if "frozen" in opponents and not frozen_path:
+        raise ValueError("AI_MISSING_OPPONENT")
     started = time.monotonic()
     games = []
     with RulesProcess(catalog, weights) as rules:
@@ -34,11 +37,14 @@ def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitati
         model, checkpoint = load_checkpoint(model_path, meta)
         seen = set(checkpoint.get("seenGames", [])) | set(forbidden_seeds)
         imitation = None
+        frozen = None
         if "imitation" in opponents:
             if not imitation_path:
                 raise ValueError("AI_MISSING_OPPONENT")
             imitation, rival = load_checkpoint(imitation_path, meta)
             seen.update(rival.get("seenGames", []))
+        if "frozen" in opponents:
+            frozen, _ = load_frozen_checkpoint(frozen_path, meta)
         for opponent in opponents:
             for pair in range(pairs):
                 seed = f"{prefix}-{pair}"
@@ -51,8 +57,8 @@ def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitati
                     observation = rules.request(op="reset", seed=seed, playOrder=["0", "1"])
                     while not observation["done"]:
                         actor = observation["actor"]
-                        if actor == seat or opponent == "imitation":
-                            network = model if actor == seat else imitation
+                        if actor == seat or opponent in ("imitation", "frozen"):
+                            network = model if actor == seat else (imitation if opponent == "imitation" else frozen)
                             with torch.no_grad():
                                 logits, _ = infer(network, observation)
                                 index = logits.argmax().item()
@@ -83,7 +89,8 @@ def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitati
     report = {"meta": meta, "model": str(model_path), "summary": summary, "games": games,
               "seconds": time.monotonic() - started,
               "limitations": ["local-practice-v1", "small-sample", "paired-games-not-independent",
-                             "selection-evaluation-not-final-holdout"]}
+                             "selection-evaluation-not-final-holdout",
+                             "frozen-opponent-trained-on-previous-setup"]}
     output.parent.mkdir(parents=True, exist_ok=True)
     output.with_suffix(".last-replay.json").write_text(json.dumps(replays), encoding="utf-8")
     temporary = output.with_suffix(output.suffix + ".tmp")
@@ -96,8 +103,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("model", type=Path)
     parser.add_argument("--pairs", type=int, default=4)
-    parser.add_argument("--opponents", nargs="+", choices=["random", "guide", "imitation"], default=["random", "guide"])
+    parser.add_argument("--opponents", nargs="+", choices=["random", "guide", "imitation", "frozen"], default=["random", "guide"])
     parser.add_argument("--imitation", type=Path)
+    parser.add_argument("--frozen", type=Path)
     parser.add_argument("--prefix", default="ai-eval-v1")
     parser.add_argument("--out", type=Path, default=ROOT / ".local/ai/evaluation.json")
     parser.add_argument("--catalog")
@@ -107,7 +115,7 @@ def main():
         parser.error("pairs >= 1")
     torch.set_num_threads(2)
     report = evaluate(args.model, args.out, args.pairs, args.opponents, args.imitation,
-                      args.prefix, args.catalog, args.weights)
+                      args.prefix, args.catalog, args.weights, frozen_path=args.frozen)
     print(json.dumps({"summary": report["summary"], "report": str(args.out)}), flush=True)
 
 

@@ -7,6 +7,8 @@ import { text, StringTable } from '../src/ui/StringTable.js';
 import { createPosition } from '../src/engine/engine.js';
 import { createLocalMatch, applyLocalAction, activeLocalPlayer, exportLocalMatch } from '../src/engine/localMatch.js';
 import { describeMatch } from '../src/ui/actionStory.js';
+import { personalField } from '../src/engine/cardRules.js';
+import { placementOptions, probeLocalAction } from '../src/engine/actionOptions.js';
 
 const catalog = JSON.parse(fs.readFileSync(new URL('../data/whitecastle-2p.json', import.meta.url)));
 const source = fs.readFileSync(new URL('../src/ui/play.js', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
@@ -33,7 +35,7 @@ class Element {
 function descendants(node) {
   return [node, ...node.children.flatMap(descendants)];
 }
-function page(match, aiSeat = null) {
+function page(match, aiSeat = null, actionProbe = null) {
   const root = new Element('main');
   const storage = new Map();
   const document = {
@@ -44,9 +46,9 @@ function page(match, aiSeat = null) {
   // 只替换浏览器宿主，不执行模块末尾的网络启动；渲染与按钮事件使用真实页面代码。
   const body = source.slice(0, source.lastIndexOf('\nrender();\nawait run('))
     .replace(/^import .+;\r?\n/gm, '');
-  const ui = vm.runInNewContext(`${body}\n({ adopt, render, playAiIfNeeded });`, {
+  const ui = vm.runInNewContext(`${body}\n({ adopt, render, playAiIfNeeded, setProbe: (value) => { probe = value; } });`, {
     document, crypto: { randomUUID }, text, StringTable, createPosition,
-    activeLocalPlayer, exportLocalMatch, describeMatch, structuredClone,
+    activeLocalPlayer, exportLocalMatch, describeMatch, structuredClone, personalField, placementOptions,
     queueMicrotask: (callback) => callback(),
     localStorage: {
       getItem: (key) => storage.get(key) ?? null,
@@ -56,6 +58,7 @@ function page(match, aiSeat = null) {
     fetch: () => { throw new Error('布局确认前不应请求AI落子'); },
   });
   ui.adopt({ id: 'setup-test', match, ai: { seat: aiSeat } });
+  ui.setProbe(actionProbe);
   ui.render();
   return { root, ui, nodes: () => descendants(root) };
 }
@@ -106,4 +109,33 @@ test('R-SETUP-01/02/03/04：只读布局预览与选完初始牌后的首轮棋�
     assert.deepEqual(match.state[key], preview[key]);
   }
   assert.ok(match.config.setup.castleRooms.every((room) => new Set(room.tiles.map((tile) => tile.color)).size >= 2));
+});
+
+test('R-AREA-01/GARDENER-01：7食物但缺印章时解释园丁字段费用，补足后允许执行', () => {
+  const match = createLocalMatch(catalog, { seed: 'gardener-field-cost-hint', playOrder: ['0', '1'] });
+  match.config.setup.players = [{
+    currentCardId: 'start-action-warrior-2',
+    resources: { food: 7, coin: 10, seal: 0 },
+    figures: { gardener: [{ cardId: 'garden-58', bridgeId: 'white' }] },
+  }, { currentCardId: 'start-action-courtier-2' }];
+  match.config.setup.castleRooms = [{
+    id: 'floor1-2', floor: 1, cardId: 'steward-s10',
+    tiles: [{ fieldId: 'top', color: 'coral' }, { fieldId: 'middle', color: 'black' }, { fieldId: 'bottom', color: 'white' }],
+  }];
+  match.state = createPosition(match.config);
+  match.phase = 'playing';
+  const action = { type: 'placeDie', actor: '0', bridgeId: 'white', side: 'right', target: { area: 'castle', id: 'floor1-2' } };
+  const probe = probeLocalAction(match, action);
+  assert.equal(probe.request.type, 'field');
+  assert.equal(probe.request.player.resources.food, 7);
+  assert.deepEqual(probe.options.map(({ value }) => value), [{ type: 'field', fieldId: 'bottom', skip: true }]);
+  const blocked = page(match, null, probe).nodes().find((node) => node.className === 'action-panel');
+  assert.ok(blocked.textContent.includes(text('play.fieldCost', { cost: '大名印章 ×1' })));
+  assert.ok(blocked.textContent.includes(text('play.fieldUnavailable', { missing: '大名印章（需要 1，现有 0）' })));
+  assert.ok(blocked.textContent.includes(text('play.skipField')));
+  assert.ok(!blocked.textContent.includes(text('play.executeField', { cost: '大名印章 ×1' })));
+  match.state.players['0'].resources.seal = 1;
+  const available = page(match, null, probeLocalAction(match, action)).nodes().find((node) => node.className === 'action-panel');
+  assert.ok(available.textContent.includes(text('play.executeField', { cost: '大名印章 ×1' })));
+  assert.ok(!available.textContent.includes('暂时不能执行'));
 });

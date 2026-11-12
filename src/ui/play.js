@@ -742,6 +742,16 @@ function wizardView() {
       if (request.player) aside.append(resourceView(request.player), el('p', text('play.selectedPreview'), 'muted'));
       if (request.type === 'field') {
         aside.append(el('p', effects(request.field.effects), 'field-description'));
+        const costs = request.field.cost ?? [];
+        if (costs.length) aside.append(el('p', text('play.fieldCost', { cost: effects(costs) }), 'cost'));
+        const missing = costs.filter((cost) => request.player.resources[cost.type] < cost.amount);
+        if (missing.length) {
+          aside.append(el('p', text('play.fieldUnavailable', {
+            missing: missing.map((cost) => text('play.fieldMissing', {
+              resource: effectName(cost.type), required: cost.amount, available: request.player.resources[cost.type],
+            })).join(' · '),
+          }), 'error'));
+        }
       }
       if (request.type === 'effectOrder') {
         const list = el('ol', null, 'effect-order');

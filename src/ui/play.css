@@ -91,7 +91,20 @@ details > summary { padding: 5px 0; }
 .personal-row { padding:9px 0; border-top:1px solid #dddccc; font-size:11px; }
 .personal-row h3 { font-family:inherit; font-size:12px; }.personal-row p { font-size:10px; margin:3px 0; }
 .player-panel details { font-size:11px; margin:8px 0; }
-.action-tray { position:sticky; top:16px; border:1px solid #c6cfbc; background:#fffdf5; border-radius:8px; padding:22px; box-shadow:0 5px 18px #223c3210; max-height:calc(100vh - 32px); overflow:auto; }
+.side-tray { position:sticky; top:16px; border:1px solid #c6cfbc; background:#fffdf5; border-radius:8px; padding:18px; box-shadow:0 5px 18px #223c3210; max-height:calc(100vh - 32px); overflow:auto; }
+.side-tray h2 { font-size:18px; margin:0 0 10px; }
+.resource-sticky { position:sticky; top:0; z-index:1; background:#fffdf5; padding-bottom:8px; }
+.action-drawer summary { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
+.action-drawer summary small { font-weight:400; }
+.resource-card { border:1px solid #ddd6c2; border-left:4px solid #bc7b55; border-radius:6px; padding:10px 12px; margin:0 0 10px; background:#faf7ef; }
+.resource-card.p1 { border-left-color:#7899a8; }
+.resource-card.active { box-shadow:0 0 0 2px #b8c4aa; }
+.resource-card h3 { margin:0; }
+.resource-card .resources { grid-template-columns:repeat(3,1fr); }
+.action-drawer { margin:18px 0; border:1px solid #c6cfbc; border-radius:8px; background:#fffdf5; padding:8px 16px 12px; }
+.action-drawer summary { font-weight:750; display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
+.action-drawer summary small { font-weight:400; }
+.action-tray { position:static; top:auto; border:1px solid #c6cfbc; background:#fffdf5; border-radius:8px; padding:22px; box-shadow:0 5px 18px #223c3210; max-height:calc(100vh - 32px); overflow:auto; }
 .action-tray h3 { margin-top:18px; }
 .action-tray p { font-size:12px; }
 .action-tray .resources { grid-template-columns:repeat(3,1fr); }
@@ -113,7 +126,7 @@ th,td { text-align:left; border-bottom:1px solid #d9d7c7; padding:9px 12px; }.to
 .error { color:#a35437; }
 footer { margin-top:20px; border-top:1px solid #cfcebf; padding-top:16px; color:#8c8b77; font-size:11px; }
 @media(max-width:1150px) { main { padding:20px 16px; }.table-layout { grid-template-columns:minmax(0,1fr) 280px;gap:12px; }.section-panel,.player-panel,.draft { padding:14px; }.resources { grid-template-columns:repeat(3,1fr); }.action-tray { padding:16px; }.bridge-grid { gap:10px; }.die { width:34px;height:34px;font-size:20px; }.card { font-size:11px; } }
-@media(max-width:850px) { .table-layout { grid-template-columns:1fr; }.action-tray { position:static; max-height:none; grid-row:1; }.masthead { align-items:start; gap:15px; }.masthead .toolbar { flex-direction:column; }.roundbar { gap:12px;flex-wrap:wrap; }.roundbar .muted { width:100%;margin:0; }.action-choices { max-height:300px; }.action-tray .resources { grid-template-columns:repeat(6,1fr); }.test-guide { display:none; }.floor-1 { gap:8px; }.room { padding:8px; }.draft-grid { gap:10px; } }
+@media(max-width:850px) { .table-layout { grid-template-columns:1fr; }.side-tray { position:static; max-height:none; grid-row:1; }.masthead { align-items:start; gap:15px; }.masthead .toolbar { flex-direction:column; }.roundbar { gap:12px;flex-wrap:wrap; }.roundbar .muted { width:100%;margin:0; }.action-choices { max-height:300px; }.action-tray .resources { grid-template-columns:repeat(6,1fr); }.test-guide { display:none; }.floor-1 { gap:8px; }.room { padding:8px; }.draft-grid { gap:10px; } }
 @media(max-width:520px) { .bridge-grid,.yard-grid,.utility-grid { grid-template-columns:1fr; }.floor-1,.floor-2 { grid-template-columns:1fr; }.players-grid,.draft-grid { grid-template-columns:1fr; }.dice-line { justify-content:center; }.die-holder { flex:0 1 90px; }.die { width:46px;height:46px; }.savebar { gap:5px; }.savebar button { font-size:10px; }.roundbar { font-size:12px; }.setup-panel label { flex-wrap:wrap; }.masthead .pill { display:none; } }
 .ai-panel { margin: 0 0 16px; padding: 12px; background: #f3ecdf; border: 1px solid #ddc9a4; border-radius: 6px; }
 .ai-panel h3 { margin-top: 0; }

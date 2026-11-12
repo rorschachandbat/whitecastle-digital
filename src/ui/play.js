@@ -467,7 +467,7 @@ function playersView() {
   const grid = el('section', null, 'players-grid');
   for (const [id, player] of Object.entries(state.players)) {
     const node = el('article', null, `player-panel p${id} ${activeLocalPlayer(session.match) === id ? 'active' : ''}`);
-    node.append(el('h2', playerName(id)), resourceView(player), el('p', `${text('play.time', { n: player.timePosition })} · ${text('play.turns', { count: state.turnsUsed[id] })}`, 'muted'));
+    node.append(el('h2', playerName(id)), el('p', `${text('play.time', { n: player.timePosition })} · ${text('play.turns', { count: state.turnsUsed[id] })}`, 'muted'));
     for (const row of config.personalDomainRows) {
       const n = player.figures[row.figureType].length;
       const field = personalField(byCard(player.currentCard), row.id);
@@ -604,15 +604,40 @@ function aiPanel() {
   }
   return panel;
 }
-function wizardView() {
-  const aside = el('aside', null, 'action-tray');
-  aside.append(el('div', text(aiSeat ? 'play.ai.connected' : 'play.connected'), 'eyebrow'), el('h2', text('play.actionTitle')), aiPanel());
+function resourceColumn() {
+  const aside = el('aside', null, 'side-tray');
+  const resources = el('div', null, 'resource-sticky');
+  resources.append(el('h2', text('play.resources')));
   const actor = activeLocalPlayer(session.match);
+  const players = session.match.state?.players ?? session.match.draft?.players ?? {};
+  for (const id of ['0', '1']) {
+    const card = el('section', null, `resource-card p${id}${actor === id ? ' active' : ''}`);
+    const who = aiSeat
+      ? text(id === aiSeat ? 'play.story.whoAi' : 'play.story.whoYou', { player: playerName(id) })
+      : playerName(id);
+    card.append(el('h3', who));
+    const player = players[id];
+    if (!player?.resources) card.append(el('p', text('play.resourcesPending'), 'muted'));
+    else {
+      card.append(resourceView(player));
+      if (session.match.state) card.append(el('p', `${text('play.time', { n: player.timePosition })} · ${text('play.turns', { count: session.match.state.turnsUsed[id] })}`, 'muted'));
+    }
+    resources.append(card);
+  }
+  aside.append(resources);
   if (opponentTurn()) {
     aside.append(el('p', text(aiPaused ? 'play.ai.paused' : 'play.ai.turn', {
       generation: generationLabel(session.ai?.generation), player: playerName(actor),
     }), aiPaused ? '' : 'ai-thinking'));
-    aside.append(storyPanel());
+  }
+  aside.append(aiPanel(), storyPanel());
+  return aside;
+}
+function wizardView() {
+  const aside = el('div', null, 'action-body');
+  const actor = activeLocalPlayer(session.match);
+  if (opponentTurn()) {
+    aside.append(el('p', text(aiPaused ? 'play.ai.paused' : 'play.ai.thinking'), aiPaused ? '' : 'ai-thinking'));
     return aside;
   }
   if (probe) {
@@ -672,8 +697,19 @@ function wizardView() {
     exchanges(aside, actor, session.match.state.players[actor]);
   } else if (session.match.phase === 'draft') aside.append(el('p', text('play.draftHint'), 'muted'));
   const help = el('p', text('play.testGuide'), 'test-guide');
-  aside.append(help, storyPanel());
+  aside.append(help);
   return aside;
+}
+function actionDrawer() {
+  const details = el('details', null, 'action-drawer');
+  const choosing = Boolean(probe) || session.match.phase === 'round-gardens';
+  details.open = choosing;
+  const summary = el('summary');
+  summary.append(el('span', text('play.actionTitle')), el('small', text('play.actionFold'), 'muted'));
+  details.append(summary);
+  details.append(wizardView());
+  if (choosing) queueMicrotask(() => details.scrollIntoView({ block: 'nearest' }));
+  return details;
 }
 function scoreView() {
   const result = session.match.state.score;
@@ -747,8 +783,8 @@ function render() {
     if (session.match.phase === 'finished') board.append(scoreView());
     board.append(castleView(), bridgesView(), yardsView(), playersView());
   }
-  layout.append(board, wizardView());
-  root.append(layout, logView(), el('footer', text('play.autosaved')));
+  layout.append(board, resourceColumn());
+  root.append(layout, actionDrawer(), logView(), el('footer', text('play.autosaved')));
 }
 render();
 await run(async () => {

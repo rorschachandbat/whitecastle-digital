@@ -541,6 +541,17 @@ function aiPanel() {
     }, 'confirm', { allowDuringOpponent: true });
     confirm.disabled = busy || status !== 'available';
     panel.append(select, confirm);
+    if (status === 'catalog-mismatch') {
+      panel.append(button(text('play.ai.useDefault'), async () => {
+        const seat = humanSeat === '0' ? '1' : '0';
+        customCatalog = null;
+        localStorage.setItem(AI_KEY, JSON.stringify({ seat }));
+        await newSession({ seed, catalog: defaultCatalog });
+        if (!message) message = text('play.ai.confirmed', {
+          generation: generationLabel(session.ai?.generation), human: playerName(humanSeat), ai: playerName(seat),
+        });
+      }, 'confirm', { allowDuringOpponent: true }));
+    }
   }
   return panel;
 }

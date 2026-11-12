@@ -74,6 +74,8 @@ async function handle(message, sender) {
     await stopCurrent();
     throw error;
   }
+  // 只长期保存成功连接的地址，配对码仍限于浏览器会话。
+  await chrome.storage.local.set({ lastAddress: address });
   return { ok: true };
 }
 chrome.runtime.onMessage.addListener((message, sender, reply) => {

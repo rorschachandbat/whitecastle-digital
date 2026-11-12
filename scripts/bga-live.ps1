@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateRange(1024, 65535)][int]$Port = 4180
 )
 $ErrorActionPreference = 'Stop'
@@ -9,24 +9,36 @@ $runtimeFolder = Join-Path $projectRoot '.local/bga-live'
 New-Item -ItemType Directory -Path $runtimeFolder -Force | Out-Null
 $running = $false
 $expectedExtension = Join-Path $projectRoot 'browser-extension/bga-live'
-# 旧版服务继续保留，新版自动选择相邻端口；不结束用户现有进程或其他工作副本。
+$occupiedPorts = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Select-Object -ExpandProperty LocalPort)
+$freePort = $null
+$candidatePort = $Port
+# 先找同副本的兼容服务，再使用空闲端口，避免关闭旧服务后重复启动。
 for ($portAttempt = 0; $portAttempt -lt 10; $portAttempt++) {
     # 4190是浏览器禁用的Sieve端口，HTTP探测可成功但侧栏和扩展无法访问。
-    if ($Port -eq 4190) { $Port += 2 }
-    $address = "http://127.0.0.1:$Port"
-    $occupied = $false
-    try {
-        $probe = Invoke-RestMethod -Uri "$address/api/live/state" -TimeoutSec 2
-        $occupied = $true
-        $config = Invoke-RestMethod -Uri "$address/api/live/config" -TimeoutSec 2
-        $running = $probe.format -eq 'whitecastle-bga-live-status' -and $config.extensionPath -eq $expectedExtension `
-            -and $config.adviceVersion -eq 5
-    } catch {}
-    if ($running -or -not $occupied) { break }
-    $Port += 2
-    if ($Port -gt 65535) { throw 'BGA_LIVE_NO_AVAILABLE_PORT' }
+    if ($candidatePort -eq 4190) { $candidatePort += 2 }
+    if ($candidatePort -gt 65535) { break }
+    if ($occupiedPorts -contains $candidatePort) {
+        $candidateAddress = "http://127.0.0.1:$candidatePort"
+        try {
+            $probe = Invoke-RestMethod -Uri "$candidateAddress/api/live/state" -TimeoutSec 2
+            $config = Invoke-RestMethod -Uri "$candidateAddress/api/live/config" -TimeoutSec 2
+            $running = $probe.format -eq 'whitecastle-bga-live-status' -and $probe.workspaceRoot -eq $projectRoot `
+                -and $config.extensionPath -eq $expectedExtension -and $config.adviceVersion -eq 5
+        } catch { $running = $false }
+        if ($running) {
+            $Port = $candidatePort
+            break
+        }
+    } elseif ($null -eq $freePort) {
+        $freePort = $candidatePort
+    }
+    $candidatePort += 2
 }
-if ($occupied -and -not $running) { throw 'BGA_LIVE_NO_AVAILABLE_PORT' }
+if (-not $running) {
+    if ($null -eq $freePort) { throw 'BGA_LIVE_NO_AVAILABLE_PORT' }
+    $Port = $freePort
+}
+$address = "http://127.0.0.1:$Port"
 if (-not $running) {
     # 配套脚本从启动器位置定位，任意分支副本均不依赖当前工作目录。
     $arguments = '"' + $serverFile + '" ' + $Port

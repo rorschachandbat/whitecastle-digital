@@ -211,7 +211,9 @@ test('扩展按稳定DOM采样、忽略隐藏元素，停止后没有计时器�
 
 test('扩展后台只转发手动授权标签页与桌号，页面不能伪造启停指令', async () => {
   const store = {};
+  const persistent = {};
   const requests = [];
+  let injectionFails = false;
   const context = vm.createContext({
     URL, crypto: { randomUUID: () => watchId }, AbortSignal, Date,
     fetch: async (url, options) => { requests.push({ url, options }); return { ok: true }; },
@@ -220,12 +222,15 @@ test('扩展后台只转发手动授权标签页与桌号，页面不能伪造�
         getURL: (name) => `chrome-extension://${'a'.repeat(32)}/${name}`,
         onMessage: { addListener() {} },
       },
-      storage: { session: {
-        get: async (keys) => Object.fromEntries((Array.isArray(keys) ? keys : [keys]).map((key) => [key, store[key]])),
-        set: async (value) => Object.assign(store, value),
-        remove: async (keys) => keys.forEach((key) => delete store[key]),
-      } },
-      scripting: { executeScript: async () => [] },
+      storage: {
+        session: {
+          get: async (keys) => Object.fromEntries((Array.isArray(keys) ? keys : [keys]).map((key) => [key, store[key]])),
+          set: async (value) => Object.assign(store, value),
+          remove: async (keys) => keys.forEach((key) => delete store[key]),
+        },
+        local: { set: async (value) => Object.assign(persistent, value) },
+      },
+      scripting: { executeScript: async () => { if (injectionFails) throw new Error('INJECTION_FAILED'); return []; } },
       tabs: {
         query: async () => [{ id: 8, url: 'https://boardgamearena.com/table?table=123' }],
         sendMessage: async () => ({ ok: true }),
@@ -241,6 +246,8 @@ test('扩展后台只转发手动授权标签页与桌号，页面不能伪造�
   await assert.rejects(handle({ ...start, address: 'https://evil.test' }, popup), /LOCAL_ADDRESS_INVALID/);
   await handle(start, popup);
   assert.equal(requests.length, 1);
+  assert.deepEqual(persistent, { lastAddress: start.address });
+  assert.equal(store.settings.token, start.token);
   const message = { type: 'CAPTURE', ...capture() };
   assert.equal((await handle(message, { tab: { id: 9 }, url: 'https://boardgamearena.com/table?table=123' })).ok, false);
   assert.equal((await handle(message, { tab: { id: 8 }, url: 'https://boardgamearena.com/table?table=999' })).ok, false);
@@ -250,6 +257,43 @@ test('扩展后台只转发手动授权标签页与桌号，页面不能伪造�
   await handle({ type: 'STOP' }, popup);
   assert.equal(store.watch, undefined);
   assert.ok(requests[2].url.endsWith('/api/live/stop'));
+  assert.deepEqual(persistent, { lastAddress: start.address });
+  injectionFails = true;
+  await assert.rejects(handle({ ...start, address: 'http://127.0.0.1:4192' }, popup), /INJECTION_FAILED/);
+  assert.deepEqual(persistent, { lastAddress: start.address });
+});
+
+test('扩展弹窗优先恢复会话，浏览器重启后只恢复地址，不恢复配对码', async () => {
+  const source = fs.readFileSync(new URL('../browser-extension/bga-live/popup.js', import.meta.url), 'utf8')
+    .replace("import { text } from './StringTable.js';", '');
+  for (const scenario of [
+    { session: {}, local: {}, address: 'http://127.0.0.1:4180', token: '' },
+    { session: {}, local: { lastAddress: 'http://127.0.0.1:4192' }, address: 'http://127.0.0.1:4192', token: '' },
+    { session: { settings: { address: 'http://127.0.0.1:4184', token: 'a'.repeat(48) } },
+      local: { lastAddress: 'http://127.0.0.1:4192' }, address: 'http://127.0.0.1:4184', token: 'a'.repeat(48) },
+  ]) {
+    const nodes = [];
+    const context = vm.createContext({
+      text: (key) => key,
+      document: {
+        createElement: (tag) => {
+          const node = { tag, value: '', append() {}, setAttribute() {} };
+          nodes.push(node);
+          return node;
+        },
+        querySelector: () => ({ append() {} }),
+      },
+      chrome: { storage: {
+        session: { get: async () => scenario.session },
+        local: { get: async () => scenario.local },
+      } },
+    });
+    await vm.runInContext(`(async () => { ${source}\n })()`, context);
+    const inputs = nodes.filter((node) => node.tag === 'input');
+    assert.equal(inputs[0].value, scenario.address);
+    assert.equal(inputs[1].value, scenario.token);
+    assert.equal(nodes.find((node) => node.tag === 'a').href, scenario.address);
+  }
 });
 
 test('选牌配对来自可见坐标，行换位可对应，重叠或换行不猜组合', () => {

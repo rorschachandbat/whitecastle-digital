@@ -27,11 +27,12 @@ const status = el('p', text('waiting'));
 status.setAttribute('role', 'status');
 root.append(start, stop, open, status);
 const saved = await chrome.storage.session.get(['settings', 'lastStatus']);
+const persistent = await chrome.storage.local.get('lastAddress');
 if (saved.settings) {
   address.value = saved.settings.address;
   token.value = saved.settings.token;
-  open.href = address.value;
-}
+} else if (persistent.lastAddress) address.value = persistent.lastAddress;
+open.href = address.value;
 if (saved.lastStatus?.code) status.textContent = text('error', saved.lastStatus);
 else if (saved.lastStatus?.table) status.textContent = text('updated', saved.lastStatus);
 start.onclick = async () => {

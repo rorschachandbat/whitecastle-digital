@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { TrainingEnvironment } from '../src/ai/environment.js';
 import { chooseHeuristic } from '../src/ai/heuristicPolicy.js';
 import { playOpponentSeat, policyChoice } from '../src/ai/playOpponent.js';
-import { championGeneration, describeChampion } from '../scripts/play-ai.mjs';
+import { championGeneration, describeChampion, createPlayAi } from '../scripts/play-ai.mjs';
+import { loadTrainingConfig } from '../scripts/ai-common.mjs';
 import { createLocalClient, submitLocalAction } from '../src/game/localClient.js';
 import { activeLocalPlayer } from '../src/engine/localMatch.js';
 
@@ -41,6 +44,16 @@ test('对手席只走指定玩家，无效策略不改局面', async () => {
   assert.equal(bounded.bounded, true);
   assert.equal(bounded.actions.length, 0);
   assert.deepEqual(env.match, before);
+});
+
+test('模仿预热检查点也可以固定为对手', async () => {
+  const env = new TrainingEnvironment(catalog, weights);
+  env.reset('opponent-initial', ['0', '1']);
+  const result = await playOpponentSeat(env, async (observation) => ({
+    ...heuristicPolicy(observation), model: 'initial',
+  }), { seat: env.actor, generation: 'initial', maxDecisions: 1 });
+  assert.equal(result.model, 'initial');
+  assert.equal(result.decisions, 1);
 });
 
 test('冠军席贪心与启发式走完整局一致，动作可提交给真实Client', async () => {
@@ -81,6 +94,7 @@ test('冠军指针只接受循环目录内的候选检查点', () => {
   assert.equal(championGeneration('../candidate.pt'), null);
   assert.equal(championGeneration('generation-117/candidate.pt'), null);
   assert.equal(championGeneration('generation-00117/latest.pt'), null);
+  assert.equal(championGeneration('initial/imitation.pt'), 'initial');
   const meta = { profile: 'local-practice-v1' };
   assert.equal(describeChampion({
     state: { champion: 'generation-00003/candidate.pt', meta }, checkpointExists: true, pythonExists: true,
@@ -98,4 +112,54 @@ test('冠军指针只接受循环目录内的候选检查点', () => {
     state: { champion: 'C:/outside/candidate.pt', meta }, checkpointExists: false, pythonExists: true,
     meta, catalogMatches: true,
   }).status, 'unavailable');
+});
+
+test('可选旧版和新版AI，仅放宽旧摆设版本，名单不接受路径且确认后固定检查点', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'whitecastle-models-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'data/whitecastle-2p.json'), JSON.stringify(catalog));
+  fs.writeFileSync(path.join(root, 'data/ai-heuristic.json'), JSON.stringify(weights));
+  const { meta } = loadTrainingConfig();
+  for (const [id, checkpoint, old] of [['r4', 'generation-00117/candidate.pt', true], ['r6', 'initial/imitation.pt', false]]) {
+    const loop = path.join(root, '.local/ai', `continuous-${id}`);
+    fs.mkdirSync(path.dirname(path.join(loop, checkpoint)), { recursive: true });
+    fs.writeFileSync(path.join(loop, checkpoint), 'fixture');
+    fs.writeFileSync(path.join(loop, 'loop-state.json'), JSON.stringify({
+      champion: checkpoint, meta: old ? { ...meta, setupVersion: 'old-setup' } : meta,
+    }));
+  }
+  const called = [];
+  const ai = createPlayAi({
+    root, settings: { loopDirectory: '.local/ai/continuous-r6', python: process.execPath },
+    inferModel: async (observation, generation, modelId) => {
+      called.push({ generation, modelId });
+      return { ...heuristicPolicy(observation), model: generation };
+    },
+  });
+  t.after(() => ai.close());
+  const listing = await ai.status(catalog);
+  assert.equal(listing.models.length, 2);
+  assert.equal(listing.models.find((item) => item.modelId === 'r4').legacySetup, true);
+  assert.equal(listing.models.find((item) => item.modelId === 'r6').generation, 'initial');
+  assert.ok(listing.models.every((item) => item.status === 'available'));
+  await fails(() => ai.status(catalog, '../r4'), 'AI_MODEL_INVALID');
+  const client = createLocalClient(catalog, { seed: 'model-select', playOrder: ['0', '1'] });
+  const session = { client };
+  t.after(() => session.client.stop());
+  await ai.assignSeat(session, '1', 'r4');
+  assert.equal(session.aiModel, 'r4');
+  assert.equal(session.aiGeneration, 'generation-00117');
+  // 名单更新不能改变已确认对局的检查点。
+  await ai.status(catalog, 'r6');
+  await ai.play(session);
+  assert.ok(called.every((item) => item.modelId === 'r4' && item.generation === 'generation-00117'));
+  await ai.assignSeat(session, null);
+  await ai.assignSeat(session, activeLocalPlayer(session.client.getState().G), 'r6');
+  assert.equal(session.aiModel, 'r6');
+  assert.equal(session.aiGeneration, 'initial');
+  const incompatible = JSON.parse(fs.readFileSync(path.join(root, '.local/ai/continuous-r4/loop-state.json')));
+  incompatible.meta.encoderHash = 'wrong';
+  fs.writeFileSync(path.join(root, '.local/ai/continuous-r4/loop-state.json'), JSON.stringify(incompatible));
+  assert.equal((await ai.status(catalog, 'r4')).status, 'incompatible');
 });

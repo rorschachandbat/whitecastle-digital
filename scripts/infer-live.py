@@ -7,20 +7,23 @@ from pathlib import Path
 
 import torch
 
-from ai_model import META_KEYS, infer, load_checkpoint
+from ai_model import META_KEYS, infer, load_checkpoint, load_frozen_checkpoint
 
 
 def champion_checkpoint(loop, state, generation):
-    """只接受循环目录内的 generation-#####/candidate.pt，不跟随外部路径。"""
+    """只接受循环目录内的候选或初始模仿检查点，不跟随外部路径。"""
     loop = loop.resolve()
     if generation is None:
         parts = str(state["champion"]).replace("\\", "/").split("/")
-        if len(parts) < 2 or parts[-1] != "candidate.pt":
-            raise ValueError("AI_CHAMPION_INVALID")
-        generation = parts[-2]
-    if not re.fullmatch(r"generation-\d{5}", generation or ""):
+        if parts[-2:] == ["initial", "imitation.pt"]:
+            generation = "initial"
+        else:
+            if len(parts) < 2 or parts[-1] != "candidate.pt":
+                raise ValueError("AI_CHAMPION_INVALID")
+            generation = parts[-2]
+    if generation != "initial" and not re.fullmatch(r"generation-\d{5}", generation or ""):
         raise ValueError("AI_CHAMPION_INVALID")
-    checkpoint = (loop / generation / "candidate.pt").resolve()
+    checkpoint = (loop / ("initial/imitation.pt" if generation == "initial" else f"{generation}/candidate.pt")).resolve()
     if loop not in checkpoint.parents or not checkpoint.is_file():
         raise ValueError("AI_CHAMPION_INVALID")
     return checkpoint, generation
@@ -31,17 +34,20 @@ def main():
     parser.add_argument("--loop", type=Path, required=True)
     parser.add_argument("--generation", default=None)
     parser.add_argument("--stream", action="store_true")
+    parser.add_argument("--allow-legacy-setup", action="store_true")
     args = parser.parse_args()
     request = json.loads(sys.stdin.readline()) if args.stream else json.load(sys.stdin)
     state = json.loads((args.loop / "loop-state.json").read_text(encoding="utf-8"))
-    if any(state["meta"].get(key) != request["meta"].get(key) for key in META_KEYS):
+    keys = [key for key in META_KEYS if not (args.allow_legacy_setup and key == "setupVersion")]
+    if any(state["meta"].get(key) != request["meta"].get(key) for key in keys):
         raise ValueError("AI_MODEL_CONFIG_MISMATCH")
     # 指定代数时固定该检查点；未指定时仍只解析当前冠军的目录内相对尾部。
     checkpoint_path, generation = champion_checkpoint(args.loop, state, args.generation)
     torch.set_num_threads(2)
-    model, _ = load_checkpoint(checkpoint_path, request["meta"])
+    loader = load_frozen_checkpoint if args.allow_legacy_setup else load_checkpoint
+    model, _ = loader(checkpoint_path, request["meta"])
     while True:
-        if any(state["meta"].get(key) != request["meta"].get(key) for key in META_KEYS):
+        if any(state["meta"].get(key) != request["meta"].get(key) for key in keys):
             raise ValueError("AI_MODEL_CONFIG_MISMATCH")
         observations = request.get("observations") or [request["observation"]]
         if not 1 <= len(observations) <= 12:

@@ -4,6 +4,7 @@ import { placementOptions, chooseActionOption, roundGardenOptions } from '../eng
 import { personalField } from '../engine/cardRules.js';
 import { parseCatalog } from '../data/catalog.js';
 import { describeMatch } from './actionStory.js';
+import { createPosition } from '../engine/engine.js';
 
 const root = document.querySelector('#play');
 const STORAGE = 'whitecastle.local.play.v1';
@@ -17,12 +18,15 @@ let defaultCatalog;
 let customCatalog;
 let busy = false;
 let message = '';
-let seed = 'himeji-2026';
+let seed = crypto.randomUUID();
+let layoutReviewed = false;
+let focusDraft = false;
 let order = [];
 let aiSeat = null;
 let aiPaused = false;
 let aiAvailability = null;
 let humanSeat = '0';
+let selectedAiModel = null;
 document.title = text('play.title');
 
 const el = (tag, content, className = '') => {
@@ -37,7 +41,8 @@ const effectName = (type) => text(`editor.effect.${type}`);
 const effects = (items = []) => items.length ? items.map((item) => `${effectName(item.type)} ×${item.amount}`).join(' · ') : text('play.none');
 const byCard = (id) => session?.match.config.cards.find((card) => card.id === id);
 const roomName = (id) => {
-  const room = session?.match.state?.castleRooms.find((item) => item.id === id);
+  const rooms = session?.match.state?.castleRooms ?? session?.match.config.setup.castleRooms ?? [];
+  const room = rooms.find((item) => item.id === id);
   return room ? text('play.room', { floor: room.floor, n: id.split('-').at(-1) }) : id;
 };
 const fieldName = (id) => StringTable[`play.field.${id}`] ? text(`play.field.${id}`) : id;
@@ -52,20 +57,23 @@ const button = (title, action, className = '', options = {}) => {
 function readAiPreference() {
   try {
     const value = JSON.parse(localStorage.getItem(AI_KEY) ?? 'null');
-    return value?.seat === '0' || value?.seat === '1' ? value.seat : null;
+    return value?.seat === '0' || value?.seat === '1' ? value : null;
   } catch { return null; }
 }
 function generationLabel(generation) {
+  if (generation === 'initial') return text('play.ai.initial');
   const value = Number(String(generation ?? '').replace('generation-', ''));
-  return Number.isInteger(value) && value >= 0 ? String(value) : text('play.none');
+  return Number.isInteger(value) && value >= 0 ? text('play.ai.generation', { n: value }) : text('play.none');
 }
 function opponentTurn() {
   return Boolean(session && aiSeat && activeLocalPlayer(session.match) === aiSeat);
 }
 function adopt(next) {
+  if (next?.id !== session?.id) layoutReviewed = false;
   session = next;
   aiSeat = next?.ai?.seat ?? null;
   aiPaused = Boolean(next?.ai?.paused);
+  if (next?.ai?.modelId) selectedAiModel = next.ai.modelId;
   return next;
 }
 function assertHumanTurn() {
@@ -73,12 +81,17 @@ function assertHumanTurn() {
 }
 async function refreshAiAvailability() {
   try {
-    aiAvailability = await api(session ? `ai-status?id=${encodeURIComponent(session.id)}` : 'ai-status');
+    const query = new URLSearchParams();
+    if (session) query.set('id', session.id);
+    if (selectedAiModel) query.set('model', selectedAiModel);
+    aiAvailability = await api(`ai-status?${query}`);
+    selectedAiModel ??= aiAvailability.selectedModel;
   } catch {
     aiAvailability = { status: 'unavailable', code: 'AI_NOT_AVAILABLE' };
   }
 }
 async function playAiIfNeeded() {
+  if (session?.match.phase === 'draft' && !layoutReviewed) return;
   let guard = 0;
   while (session && aiSeat && !aiPaused && session.match.phase !== 'finished' && activeLocalPlayer(session.match) === aiSeat) {
     if (++guard > 12) throw Object.assign(new Error('AI_DECISION_LIMIT'), { code: 'AI_DECISION_LIMIT' });
@@ -93,9 +106,10 @@ async function playAiIfNeeded() {
   autosave();
 }
 async function applyStoredAi() {
-  const seat = readAiPreference();
-  if (!session || !seat) return;
-  adopt(await api('ai-seat', { id: session.id, seat }));
+  const preference = readAiPreference();
+  if (!session || !preference || session.ai?.seat) return;
+  selectedAiModel = preference.modelId ?? selectedAiModel;
+  adopt(await api('ai-seat', { id: session.id, seat: preference.seat, modelId: selectedAiModel }));
 }
 async function api(route, body) {
   const response = await fetch(`/api/${route}`, body === undefined ? undefined : {
@@ -131,6 +145,7 @@ function resetWizard() {
 async function newSession(body) {
   const previous = session?.id;
   adopt(await api('session', body));
+  seed = session.match.seed;
   resetWizard();
   message = '';
   try {
@@ -240,7 +255,9 @@ function setupControls() {
   input.maxLength = 200;
   input.addEventListener('input', () => { seed = input.value; });
   field.append(input);
-  controls.append(field, button(text('play.start'), () => newSession({ seed, ...(customCatalog ? { catalog: customCatalog } : {}) })));
+  controls.append(button(text('play.randomStart'), () => newSession({
+    seed: crypto.randomUUID(), ...(customCatalog ? { catalog: customCatalog } : {}),
+  })), field, button(text('play.start'), () => newSession({ seed, ...(customCatalog ? { catalog: customCatalog } : {}) }), 'quiet'));
   controls.append(fileButton(text('play.configImport'), async (body) => {
     try { customCatalog = parseCatalog(body); } catch { throw Object.assign(new Error('INVALID_CATALOG'), { code: 'INVALID_CATALOG' }); }
     message = text('play.configReady', { revision: customCatalog.revision });
@@ -283,6 +300,7 @@ function header() {
   for (const warning of session.match.profile.warnings) notice.append(el('p', text(`play.warning.${warning}`)));
   if (aiSeat) notice.append(el('p', text('play.ai.undoHint')));
   root.append(notice);
+  root.append(el('p', text('play.currentColorRule'), 'rules-version'));
   if (message) {
     const alert = el('p', message, 'message');
     alert.setAttribute('role', 'status');
@@ -302,7 +320,11 @@ function statusBar() {
 function draftView() {
   const match = session.match;
   const section = el('section', null, 'draft');
+  section.id = 'starting-draft';
   section.append(el('h2', text('play.draft')), el('p', text('play.draftHint'), 'muted'));
+  section.append(button(text('play.layout.back'), () => {
+    document.getElementById('layout-preview')?.scrollIntoView({ block: 'start' });
+  }, 'quiet', { allowDuringOpponent: true }));
   const grid = el('div', null, 'draft-grid');
   for (const pair of match.draft.pairs) {
     const item = el('div', null, 'draft-pair');
@@ -314,6 +336,17 @@ function draftView() {
     grid.append(item);
   }
   section.append(grid);
+  return section;
+}
+function layoutIntro() {
+  const section = el('section', null, 'section-panel layout-intro');
+  section.append(el('h2', text('play.layout.title')), el('p', text('play.layout.hint'), 'muted'));
+  section.append(el('p', text('play.layout.seed', { seed: session.match.seed }), 'muted'));
+  section.append(button(text(layoutReviewed ? 'play.layout.choose' : 'play.layout.confirm'), async () => {
+    layoutReviewed = true;
+    focusDraft = true;
+    await playAiIfNeeded();
+  }, '', { allowDuringOpponent: true }));
   return section;
 }
 function targetButton(parent, id) {
@@ -344,8 +377,8 @@ function lastPlacementId() {
   if (action.target.area === 'well') return 'well';
   return `${action.target.area}:${action.target.id}`;
 }
-function occupancy(parent, id) {
-  const place = session.match.state.placements[id];
+function occupancy(parent, id, state = session.match.state) {
+  const place = state.placements[id];
   if (!place) return;
   const dice = place.dice ?? [];
   const fresh = id === lastPlacementId();
@@ -364,14 +397,21 @@ function occupancy(parent, id) {
   }
   parent.append(row);
 }
-function castleView() {
-  const { state, config } = session.match;
+function castleView(state = session.match.state) {
+  const { config } = session.match;
   const castle = el('section', null, 'castle section-panel');
   castle.append(el('h2', text('play.castle')));
   const legend = el('p', null, 'color-legend');
   legend.append(el('span', text('play.colorLegend')));
   for (const color of ['coral', 'black', 'white']) legend.append(el('span', text(`play.colorShort.${color}`), `color-chip ${color}`));
   castle.append(legend);
+  const roomColors = state.castleRooms.flatMap((room) => room.tiles.map((tile) => tile.color));
+  const inventoryCounts = (colors) => ['coral', 'black', 'white'].map((color) => text('play.tileCount', {
+    color: text(`play.colorShort.${color}`), count: colors.filter((item) => item === color).length,
+  })).join(' · ');
+  castle.append(el('p', text('play.tileInventory', {
+    castle: inventoryCounts(roomColors), well: inventoryCounts(config.setup.wellTileColors ?? []),
+  }), 'muted'));
   const top = el('div', null, 'top-room');
   top.append(el('h3', text('play.top')), cardView(byCard(state.topCardId), true));
   castle.append(top);
@@ -381,7 +421,7 @@ function castleView() {
       const node = el('article', null, 'room');
       node.append(el('h3', roomName(room.id)), el('small', text('play.compare', { n: state.placements[`castle:${room.id}`].comparisonValue })));
       node.append(cardView(config.cards.find((item) => item.id === room.cardId), true, room.tiles));
-      occupancy(node, `castle:${room.id}`);
+      occupancy(node, `castle:${room.id}`, state);
       targetButton(node, `castle:${room.id}`);
       const persons = Object.entries(state.players).flatMap(([id, player]) => player.figures.courtier
         .filter((figure) => figure.roomId === room.id).map(() => playerName(id)));
@@ -392,12 +432,12 @@ function castleView() {
   }
   return castle;
 }
-function bridgesView() {
+function bridgesView(state = session.match.state) {
   const match = session.match;
   const section = el('section', null, 'section-panel bridges');
   section.append(el('h2', text('play.bridges')));
   const grid = el('div', null, 'bridge-grid');
-  for (const bridge of match.state.bridges) {
+  for (const bridge of state.bridges) {
     const lane = el('article', null, `bridge-lane ${bridge.color}`);
     lane.append(el('h3', text(`play.color.${bridge.color}`)));
     const dice = el('div', null, 'dice-line');
@@ -422,7 +462,7 @@ function bridgesView() {
       const card = byCard(garden.cardId);
       const node = cardView(card, true);
       node.append(el('small', text('play.gardenCost', { cost: card.foodCost, points: card.victoryPoints })));
-      gardenOccupancy(node, card.id);
+      gardenOccupancy(node, card.id, state);
       lane.append(node);
     }
     grid.append(lane);
@@ -435,8 +475,8 @@ function personLabel(id) {
   if (!aiSeat) return playerName(id);
   return text(id === aiSeat ? 'play.story.whoAi' : 'play.story.whoYou', { player: playerName(id) });
 }
-function gardenOccupancy(parent, cardId) {
-  const owners = Object.entries(session.match.state.players)
+function gardenOccupancy(parent, cardId, state = session.match.state) {
+  const owners = Object.entries(state.players)
     .filter(([, player]) => player.figures.gardener.some((figure) => figure.cardId === cardId))
     .map(([id]) => id);
   const action = session.match.actions.at(-1);
@@ -456,8 +496,8 @@ function gardenOccupancy(parent, cardId) {
   }
   parent.append(row);
 }
-function yardsView() {
-  const { state, config } = session.match;
+function yardsView(state = session.match.state) {
+  const { config } = session.match;
   const section = el('section', null, 'section-panel');
   section.append(el('h2', text('play.yards')));
   const grid = el('div', null, 'yard-grid');
@@ -480,7 +520,7 @@ function yardsView() {
     const key = id === 'well' ? 'play.well' : `play.outside.${id.split(':')[1]}`;
     node.append(el('h3', text(key)), el('small', text('play.compare', { n: state.placements[id].comparisonValue })));
     if (id === 'well') node.append(el('p', effects([{ type: 'seal', amount: 1 }, ...config.setup.wellRewards])));
-    occupancy(node, id);
+    occupancy(node, id, state);
     targetButton(node, id);
     utilities.append(node);
   }
@@ -573,6 +613,28 @@ function exchanges(parent, actor, player, chained = false) {
 function aiPanel() {
   const panel = el('section', null, 'ai-panel');
   panel.append(el('h3', text('play.ai.title')), el('p', text('play.ai.notice'), 'muted'));
+  const modelLabel = el('label', text('play.ai.modelLabel'));
+  const models = el('select');
+  models.setAttribute('aria-label', text('play.ai.modelLabel'));
+  for (const model of aiAvailability?.models ?? []) {
+    const option = el('option', text('play.ai.modelOption', {
+      model: model.modelId,
+      checkpoint: model.status === 'available' ? generationLabel(model.generation) : text('play.ai.pending'),
+      rules: text(model.legacySetup ? 'play.ai.legacyShort' : 'play.ai.currentShort'),
+    }));
+    option.value = model.modelId;
+    option.selected = model.modelId === selectedAiModel;
+    models.append(option);
+  }
+  models.disabled = busy || Boolean(aiSeat);
+  models.addEventListener('change', () => run(async () => {
+    selectedAiModel = models.value;
+    await refreshAiAvailability();
+  }));
+  modelLabel.append(models);
+  panel.append(modelLabel);
+  if (aiAvailability?.legacySetup || session.ai?.legacySetup) panel.append(el('p', text('play.ai.legacyNotice'), 'muted'));
+  panel.append(button(text('play.ai.refreshModels'), refreshAiAvailability, 'quiet', { allowDuringOpponent: true }));
   const status = aiAvailability?.status;
   if (status === 'available' && aiAvailability.generation) {
     panel.append(el('p', text('play.ai.champion', { generation: generationLabel(aiAvailability.generation) }), 'muted'));
@@ -606,8 +668,8 @@ function aiPanel() {
     select.addEventListener('change', () => { humanSeat = select.value; });
     const confirm = button(text('play.ai.confirm'), async () => {
       const seat = humanSeat === '0' ? '1' : '0';
-      localStorage.setItem(AI_KEY, JSON.stringify({ seat }));
-      adopt(await api('ai-seat', { id: session.id, seat }));
+      adopt(await api('ai-seat', { id: session.id, seat, modelId: selectedAiModel }));
+      localStorage.setItem(AI_KEY, JSON.stringify({ seat, modelId: selectedAiModel }));
       message = text('play.ai.confirmed', {
         generation: generationLabel(session.ai?.generation), human: playerName(humanSeat), ai: playerName(seat),
       });
@@ -619,7 +681,7 @@ function aiPanel() {
       panel.append(button(text('play.ai.useDefault'), async () => {
         const seat = humanSeat === '0' ? '1' : '0';
         customCatalog = null;
-        localStorage.setItem(AI_KEY, JSON.stringify({ seat }));
+        localStorage.setItem(AI_KEY, JSON.stringify({ seat, modelId: selectedAiModel }));
         await newSession({ seed, catalog: defaultCatalog });
         if (!message) message = text('play.ai.confirmed', {
           generation: generationLabel(session.ai?.generation), human: playerName(humanSeat), ai: playerName(seat),
@@ -650,6 +712,11 @@ function resourceColumn() {
     resources.append(card);
   }
   aside.append(resources);
+  if (session.match.phase === 'draft') {
+    aside.append(button(text(layoutReviewed ? 'play.layout.choose' : 'play.layout.back'), () => {
+      document.getElementById(layoutReviewed ? 'starting-draft' : 'layout-preview')?.scrollIntoView({ block: 'start' });
+    }, 'quiet', { allowDuringOpponent: true }));
+  }
   if (opponentTurn()) {
     aside.append(el('p', text(aiPaused ? 'play.ai.paused' : 'play.ai.turn', {
       generation: generationLabel(session.ai?.generation), player: playerName(actor),
@@ -803,13 +870,25 @@ function render() {
   statusBar();
   const layout = el('div', null, 'table-layout');
   const board = el('div', null, 'board');
-  if (session.match.phase === 'draft') board.append(draftView());
+  if (session.match.phase === 'draft') {
+    if (layoutReviewed) board.append(draftView());
+    const preview = el('section', null, 'board layout-preview');
+    preview.id = 'layout-preview';
+    // 复用首轮同一种子和已生成的摆设，只读预览；不提前创建或修改真实对局状态。
+    const state = createPosition(session.match.config, { seed: `${session.match.seed}:round:1` });
+    preview.append(layoutIntro(), castleView(state), bridgesView(state), yardsView(state));
+    board.append(preview);
+  }
   else {
     if (session.match.phase === 'finished') board.append(scoreView());
     board.append(castleView(), bridgesView(), yardsView(), playersView());
   }
   layout.append(board, resourceColumn());
   root.append(layout, actionDrawer(), logView(), el('footer', text('play.autosaved')));
+  if (focusDraft && layoutReviewed) {
+    focusDraft = false;
+    queueMicrotask(() => document.getElementById('starting-draft')?.scrollIntoView({ block: 'start' }));
+  }
 }
 render();
 await run(async () => {
@@ -838,8 +917,16 @@ await run(async () => {
     }
   }
   const saved = localStorage.getItem(STORAGE);
+  let previousSetup = false;
   if (saved) {
-    try { await newSession({ save: JSON.parse(saved) }); return; } catch { /* 不覆盖错误存档，回到新局入口。 */ }
+    try { await newSession({ save: JSON.parse(saved) }); return; } catch (error) {
+      if (error.code === 'SAVE_SETUP_MISMATCH') {
+        // 保留旧摆设存档，避免用新抽样器静默重放出不同棋盘。
+        localStorage.setItem(`${STORAGE}.previous-setup`, saved);
+        previousSetup = true;
+      }
+    }
   }
   await newSession({ seed, catalog: defaultCatalog });
+  if (previousSetup) message = text('play.oldSetupSaved');
 });

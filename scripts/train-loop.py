@@ -108,7 +108,7 @@ def disk_bytes(folder):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--out-dir", type=Path, default=ROOT / ".local/ai/continuous-r5")
+    parser.add_argument("--out-dir", type=Path, default=ROOT / ".local/ai/continuous-r6")
     parser.add_argument("--generations", type=int, default=0, help="总目标代数；0 为持续运行")
     args = parser.parse_args()
     if args.generations < 0:

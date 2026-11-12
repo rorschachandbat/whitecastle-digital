@@ -58,7 +58,9 @@ class ModelTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "old.pt"
             save_checkpoint(path, PolicyValue(2, 2), meta)
-            current = {**meta, "setupVersion": "room-colors-v2"}
+            current = {**meta, "setupVersion": "tile-inventory-v3"}
+            with self.assertRaisesRegex(ValueError, "CONFIG_MISMATCH:setupVersion"):
+                load_checkpoint(path, current)
             load_frozen_checkpoint(path, current)
             with self.assertRaisesRegex(ValueError, "FROZEN_OPPONENT_MISMATCH:encoderHash"):
                 load_frozen_checkpoint(path, {**current, "encoderHash": "changed"})

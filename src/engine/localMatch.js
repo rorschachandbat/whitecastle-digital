@@ -5,6 +5,7 @@ import { VERIFIED_TIME_SCORES } from './influence.js';
 
 export const LOCAL_MATCH_VERSION = 1;
 export const LOCAL_PROFILE_ID = 'local-practice-v1';
+export const LOCAL_SETUP_VERSION = 'tile-inventory-v3';
 const COLORS = Object.freeze(['coral', 'black', 'white']);
 const PLAYER_IDS = Object.freeze(['0', '1']);
 const clone = (value) => structuredClone(value);
@@ -30,13 +31,18 @@ function shuffled(values, random) {
   return result;
 }
 
-/** 房间至少两种骰色。两格必须不同色；三格可以有两格同色，但不能三格同色。 */
-function roomTileColors(count, random) {
-  let colors;
-  do {
-    colors = Array.from({ length: count }, () => COLORS[Math.floor(random() * COLORS.length)]);
-  } while (new Set(colors).size < 2);
-  return colors;
+/** 红黑白各五块无放回分配；拒绝任一房间全同色，末两块保留给水井。 */
+function castleTileColors(random) {
+  const inventory = COLORS.flatMap((color) => Array(5).fill(color));
+  for (let attempt = 0; attempt < 10000; attempt += 1) {
+    const colors = shuffled(inventory, random);
+    const rooms = [[0, 3], [3, 6], [6, 9], [9, 11], [11, 13]]
+      .map(([start, end]) => colors.slice(start, end));
+    if (rooms.every((room) => new Set(room).size >= 2)) {
+      return { rooms, well: colors.slice(13) };
+    }
+  }
+  fail('DATA_UNVERIFIED');
 }
 
 function cardsOf(config, kind) {
@@ -107,22 +113,21 @@ function positionConfig(catalog, options) {
     if (attempts > 100) fail('DATA_UNVERIFIED');
   } while (new Set([...stewards.slice(0, 3), ...diplomats.slice(0, 2)].map(darkAction)).size < 2);
   if (stewards.length < 3 || diplomats.length < 2) fail('INSUFFICIENT_CARDS');
+  const tileColors = castleTileColors(random);
   const castleRooms = [
     ...stewards.slice(0, 3).map((card, index) => {
-      const tileColors = roomTileColors(3, random);
       return {
         id: `floor1-${index + 1}`, floor: 1, cardId: card.id,
         tiles: ['top', 'middle', 'bottom'].map((fieldId, colorIndex) => ({
-          fieldId, color: tileColors[colorIndex],
+          fieldId, color: tileColors.rooms[index][colorIndex],
         })),
       };
     }),
     ...diplomats.slice(0, 2).map((card, index) => {
-      const tileColors = roomTileColors(2, random);
       return {
         id: `floor2-${index + 1}`, floor: 2, cardId: card.id,
         tiles: ['upper', 'lower'].map((fieldId, colorIndex) => ({
-          fieldId, color: tileColors[colorIndex],
+          fieldId, color: tileColors.rooms[index + 3][colorIndex],
         })),
       };
     }),
@@ -151,7 +156,8 @@ function positionConfig(catalog, options) {
   config.timeTrack = clone(VERIFIED_TIME_SCORES);
   config.setup = {
     playOrder: [...options.playOrder], initialPlayer: options.playOrder[0],
-    gardens, castleRooms,
+    gardens, castleRooms, wellTileColors: tileColors.well,
+    setupVersion: LOCAL_SETUP_VERSION,
     castleDecks: { steward: stewards.slice(3).map((card) => card.id), diplomat: diplomats.slice(2).map((card) => card.id) },
     topCardId: top.id, topSlots: {},
     trainingMode: options.trainingYards === undefined ? 'separate-pools' : 'manual-visible-faces',
@@ -306,7 +312,7 @@ export function applyLocalAction(match, action) {
 export function exportLocalMatch(match) {
   assertMatch(match);
   return {
-    format: 'whitecastle-local-replay', version: LOCAL_MATCH_VERSION,
+    format: 'whitecastle-local-replay', version: LOCAL_MATCH_VERSION, setupVersion: LOCAL_SETUP_VERSION,
     catalog: clone(match.catalog), options: clone(match.options), actions: clone(match.actions),
   };
 }
@@ -314,6 +320,7 @@ export function exportLocalMatch(match) {
 export function importLocalMatch(save) {
   if (!save || save.format !== 'whitecastle-local-replay' || save.version !== LOCAL_MATCH_VERSION
     || !Array.isArray(save.actions) || save.actions.length > 2000) fail('INVALID_SAVE');
+  if (save.setupVersion !== LOCAL_SETUP_VERSION) fail('SAVE_SETUP_MISMATCH');
   let match = createLocalMatch(save.catalog, save.options);
   for (const action of save.actions) match = applyLocalAction(match, action);
   return match;

@@ -4,7 +4,7 @@
 
 从玩家昵称或链接到回放、已核对选牌决策与模型微调的入口见 [BGA训练工作流](bga-training-workflow.md)。目前真人数据只监督起始选牌策略，未接入完整放骰连锁或BGA对局价值标签。
 
-2026-11-12：城堡房间骰色改为至少两种颜色，一层可以两格同色。旧 `continuous-r4` 只见过一层三种颜色各一格，元数据增加 `setupVersion=room-colors-v2` 后不能续训。新训练使用 `guide-r5` 和 `continuous-r5`。侧栏与本地对打读取该新目录的冠军；旧冠军不能当作新摆色下的模型。
+2026-11-12：开局改为红黑白各5块无放回分配，13块城堡、2块水井，每房间至少两色。`setupVersion=tile-inventory-v3` 绑定新数据与模型。旧r5已停止；新训练使用 `guide-r6` 和 `continuous-r6`，不载入旧权重续训。本地页可显式选择旧r4/r5作对照，执行当前规则并标记旧摆设训练；侧栏仍严格匹配当前版本。
 
 每代选模评估额外用旧第117代冠军作为固定对手，在新摆色下交换座位对打。报告里的 `frozen.winRate` 是候选对旧模型的胜率，`championFrozen` 是当前冠军对旧模型的胜率。这只说明相对旧模型是否变强，不是正式保留测试集，也不作为晋级门槛。旧模型没有见过两格同色房间。
 
@@ -31,7 +31,7 @@
 
 ```powershell
 # 新版编码的数据必须重新生成；命令拒绝覆盖已有输出。
-node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r4.jsonl.gz --prefix ai-guide-r4
+node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r6.jsonl.gz --prefix ai-guide-r6
 
 # 默认持续运行；不需要联网，也不需要打开网页。
 .\scripts\train-ai.ps1
@@ -51,7 +51,7 @@ node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r4.jso
 
 `-Generations 0` 是持续模式；计算机休眠、关机时没有计算，重新执行命令才恢复。没有安装开机任务、系统服务或云计算作业。前台可用 Ctrl+C 请求停止；强制结束最多丢失正在执行但尚未写检查点的一局。预热中断会从头预热；选模评估中断会重做该份未完成报告。
 
-同一输出目录由系统文件锁保护，防止两个进程同时写模型。输出默认 `.local/ai/continuous-r5/`：
+同一输出目录由系统文件锁保护，防止两个进程同时写模型。输出默认 `.local/ai/continuous-r6/`：
 
 | 文件 | 用途 |
 |---|---|

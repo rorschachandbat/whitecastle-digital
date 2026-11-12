@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { applyInfluence } from '../src/engine/influence.js';
 import {
   createLocalMatch, applyLocalAction, activeLocalPlayer, remainingRoundGardens,
-  exportLocalMatch, importLocalMatch, replayLocalMatch, localMatchSignature,
+  exportLocalMatch, importLocalMatch, replayLocalMatch, localMatchSignature, LOCAL_SETUP_VERSION,
 } from '../src/engine/localMatch.js';
 
 const catalog = JSON.parse(fs.readFileSync(new URL('../data/whitecastle-2p.json', import.meta.url)));
@@ -87,6 +87,36 @@ test('R-SETUP-02：一层可以两格同色，两格房间和三格房间都不�
     }
   }
   assert.equal(floor1Pair, true);
+});
+
+test('R-SETUP-02：红黑白各5块，无放回分13块城堡和2块水井，房间至少两色', () => {
+  const leftoverColors = new Set();
+  for (let index = 0; index < 1000; index += 1) {
+    const { setup } = createLocalMatch(catalog, { seed: `tile-inventory-${index}` }).config;
+    const castle = setup.castleRooms.flatMap((room) => room.tiles.map((tile) => tile.color));
+    assert.equal(castle.length, 13);
+    assert.equal(setup.wellTileColors.length, 2);
+    const all = [...castle, ...setup.wellTileColors];
+    assert.equal(all.length, 15);
+    for (const color of ['coral', 'black', 'white']) {
+      assert.equal(all.filter((item) => item === color).length, 5);
+      assert.ok(castle.filter((item) => item === color).length <= 5);
+    }
+    for (const room of setup.castleRooms) assert.ok(new Set(room.tiles.map((tile) => tile.color)).size >= 2);
+    leftoverColors.add([...setup.wellTileColors].sort().join('|'));
+  }
+  assert.equal(leftoverColors.size, 6);
+});
+
+test('摆设版本绑定存档，旧版或缺失版本不能被新抽样算法静默重放', () => {
+  const save = exportLocalMatch(createLocalMatch(catalog, { seed: 'setup-version-save' }));
+  assert.equal(save.setupVersion, LOCAL_SETUP_VERSION);
+  assert.deepEqual(exportLocalMatch(importLocalMatch(save)), save);
+  const old = structuredClone(save);
+  old.setupVersion = 'room-colors-v2';
+  fails(() => importLocalMatch(old), 'SAVE_SETUP_MISMATCH');
+  delete old.setupVersion;
+  fails(() => importLocalMatch(old), 'SAVE_SETUP_MISMATCH');
 });
 
 test('R-SETUP-04：逆序选牌后以原行动顺序开始，不额外获得起始资源', () => {

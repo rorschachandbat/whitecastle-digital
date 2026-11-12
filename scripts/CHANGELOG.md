@@ -1,5 +1,12 @@
 # 工具脚本 CHANGELOG
 
+## 2026-11-12 — r6与版本选择
+
+- 新训练默认guide-r6/continuous-r6，摆设元数据来自共享LOCAL_SETUP_VERSION；r5安全停止。guide-r6已生成128局/18,227条决策，continuous-r6已启动并进入第一代评估。
+- play-ai发现本机continuous-rN目录，确认并固定版本/检查点；infer-live显式旧摆设模式仅放宽setupVersion，其余指纹保持校验；预热模型可推理。
+- 脚本路径由当前副本解析，无分支或机器绝对路径依赖；同布局分支需复制脚本、源码及data，另准备本机权重环境。未构建。
+
+
 ## 2026-11-12 — 固定旧冠军评估
 
 - `evaluate-ai.py` 支持 `frozen` 对手。训练循环在配置了 `frozenOpponent` 时，用同一批选模种子比较新旧模型。胜率写入评估报告，不改变晋级门槛。

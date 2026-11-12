@@ -53,6 +53,7 @@ function view(id, session) {
     id, match: G, framework: { currentPlayer: ctx.currentPlayer, turn: ctx.turn, gameover: ctx.gameover ?? null },
     ai: {
       seat: session.aiSeat, paused: session.aiPaused, generation: session.aiGeneration,
+      modelId: session.aiModel, legacySetup: Boolean(session.aiLegacySetup),
       method: session.aiSeat ? 'policy-only' : null,
     },
   };
@@ -77,7 +78,7 @@ const server = http.createServer(async (request, response) => {
       const id = url.searchParams.get('id');
       const session = id ? sessions.get(id) : null;
       if (id && !session) return json(response, 404, { code: 'SESSION_NOT_FOUND' });
-      return json(response, 200, await playAi.status(session?.client.getState().G.catalog));
+      return json(response, 200, await playAi.status(session?.client.getState().G.catalog, url.searchParams.get('model') ?? undefined));
     }
     if (url.pathname === '/api/session' && request.method === 'POST') {
       if (sessions.size >= 24) return json(response, 409, { code: 'SESSION_LIMIT' });
@@ -102,7 +103,7 @@ const server = http.createServer(async (request, response) => {
         return json(response, 200, view(data.id, session));
       }
       if (url.pathname === '/api/ai-seat' && request.method === 'POST') {
-        await enqueue(session, () => playAi.assignSeat(session, data.seat ?? null));
+        await enqueue(session, () => playAi.assignSeat(session, data.seat ?? null, data.modelId));
         return json(response, 200, view(data.id, session));
       }
       if (url.pathname === '/api/ai-pause' && request.method === 'POST') {

@@ -51,24 +51,40 @@ test('AI 选项编码与观察在整个三轮保持定长有限数，完整动�
 
 test('AI 合法前缀过滤没有金币完成谒见的晋升分支，保留有完整续行的选项', () => {
   const env = environment();
-  let observation = env.reset('ai-guide-1', ['1', '0']);
+  let observation = env.reset('courtier-prefix-fixture', ['1', '0']);
+  while (env.match.phase === 'draft') observation = env.step(chooseHeuristic(observation.heuristic));
+  // 显式构造零金币家臣场景，不依赖随机开局下启发式恰好走到某条晋升分支。
+  const actor = env.actor;
+  const player = env.match.state.players[actor];
+  player.resources = { coin: 0, seal: 0, food: 0, iron: 0, pearl: 2, points: 0 };
+  player.currentCard = 'start-action-courtier-1';
+  player.lanternCards = [];
+  player.figures.courtier = [{ location: 'gate' }];
+  env.match.state.castleRooms.find((room) => room.floor === 1).cardId = 'steward-s03';
+  const bridge = env.match.state.bridges.find((item) => item.id === 'coral');
+  bridge.dice.at(-1).value = 6;
+  const action = { type: 'placeDie', actor, bridgeId: 'coral', side: 'right', target: { area: 'personal', row: 'courtier' } };
+  let probe = probeLocalAction(env.match, action);
+  if (probe.request.type === 'effectOrder') probe = probeLocalAction(env.match, chooseActionOption(probe, null));
+  assert.equal(probe.request.type, 'field');
+  probe = probeLocalAction(env.match, chooseActionOption(probe, probe.options.find((item) => item.value.skip === false).value));
+  assert.equal(probe.request.type, 'courtier');
+  env.pending = probe.action;
+  env.probe = probe;
+  env.options = null;
+  env.witnesses.clear();
   let checked = false;
-  while (!observation.done) {
-    if (env.probe?.request.type === 'courtier') {
-      for (const { value } of env.probe.options) {
-        if (value.order?.[0] !== 'promote') continue;
-        const probe = probeLocalAction(env.match, chooseActionOption(env.probe, value));
-        const possible = env.canComplete(probe);
-        if (!possible) {
-          assert.ok(!env.getLegalActions().some((option) => JSON.stringify(option.value) === JSON.stringify(value)));
-          checked = true;
-        }
-      }
+  for (const { value } of env.probe.options) {
+    if (value.order?.[0] !== 'promote') continue;
+    const next = probeLocalAction(env.match, chooseActionOption(env.probe, value));
+    if (!env.canComplete(next)) {
+      assert.ok(!env.getLegalActions().some((option) => JSON.stringify(option.value) === JSON.stringify(value)));
+      checked = true;
     }
-    observation = env.step(chooseHeuristic(observation.heuristic));
   }
   assert.ok(checked, '测试必须命中晋升后无法付费的分支');
-  assert.equal(observation.placements, 18);
+  assert.ok(env.getLegalActions().some((option) => option.value.promote && !option.value.audience));
+  assert.ok(env.getLegalActions().every((option) => env.canComplete(option.next)));
 });
 
 test('AI 显式限制决策步数并提供机器错误，不自动跳过或代做动作', () => {

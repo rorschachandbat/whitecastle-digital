@@ -14,6 +14,7 @@ function fail(code) {
 
 export function championGeneration(value) {
   const parts = String(value ?? '').replaceAll('\\', '/').split('/').filter(Boolean);
+  if (parts.at(-1) === 'imitation.pt' && parts.at(-2) === 'initial') return 'initial';
   const folder = parts.at(-1) === 'candidate.pt' ? parts.at(-2) : null;
   return /^generation-\d{5}$/.test(folder ?? '') ? folder : null;
 }
@@ -23,12 +24,14 @@ export function sameMeta(actual, expected) {
 }
 
 /** 只描述能否使用冠军，不回传路径、进程号或权重。 */
-export function describeChampion({ state, checkpointExists, pythonExists, meta, catalogMatches, running = false }) {
+export function describeChampion({ state, checkpointExists, pythonExists, meta, catalogMatches, running = false, allowLegacySetup = false }) {
   const generation = championGeneration(state?.champion);
-  const base = { generation, method: 'policy-only', source: 'continuous-champion', running: Boolean(running) };
+  const legacySetup = Boolean(state && state.meta?.setupVersion !== meta?.setupVersion);
+  const base = { generation, legacySetup, method: 'policy-only', source: 'continuous-champion', running: Boolean(running) };
   if (!state || !generation || !checkpointExists) return { ...base, status: 'unavailable', code: 'AI_NOT_AVAILABLE' };
   if (!pythonExists) return { ...base, status: 'unavailable', code: 'AI_PYTHON_UNAVAILABLE' };
-  if (!sameMeta(state.meta, meta)) return { ...base, status: 'incompatible', code: 'AI_MODEL_CONFIG_MISMATCH' };
+  const expected = allowLegacySetup ? Object.fromEntries(Object.entries(meta).filter(([key]) => key !== 'setupVersion')) : meta;
+  if (!sameMeta(state.meta, expected)) return { ...base, status: 'incompatible', code: 'AI_MODEL_CONFIG_MISMATCH' };
   if (!catalogMatches) return { ...base, status: 'catalog-mismatch', code: 'AI_REPLAY_CONFIG_MISMATCH' };
   return { ...base, status: 'available', profile: meta.profile };
 }
@@ -62,15 +65,21 @@ export function createPlayAi({ root = projectRoot, inferModel, settings: injecte
     );
     return { ...settings, loop: path.resolve(root, settings.loopDirectory), ...parameters };
   };
-  async function status(catalog) {
+  async function modelConfig(modelId) {
+    const current = await config();
+    const id = modelId ?? path.basename(current.loop).replace(/^continuous-/, '');
+    if (!/^r\d+$/.test(id)) fail('AI_MODEL_INVALID');
+    return { ...current, modelId: id, loop: path.join(root, '.local', 'ai', `continuous-${id}`) };
+  }
+  async function modelStatus(catalog, modelId) {
     try {
-      const current = await config();
+      const current = await modelConfig(modelId);
       const state = JSON.parse(await fs.readFile(path.join(current.loop, 'loop-state.json'), 'utf8'));
       const generation = championGeneration(state.champion);
       let checkpointExists = false;
       if (generation) {
         try {
-          await fs.access(path.join(current.loop, generation, 'candidate.pt'));
+          await fs.access(generation === 'initial' ? path.join(current.loop, 'initial/imitation.pt') : path.join(current.loop, generation, 'candidate.pt'));
           checkpointExists = true;
         } catch { /* 缺少检查点时只报告不可用。 */ }
       }
@@ -84,34 +93,47 @@ export function createPlayAi({ root = projectRoot, inferModel, settings: injecte
           running = Date.now() / 1000 - Number(state.updatedAt) < 600;
         } catch { /* 训练进程不存在时不影响只读推理。 */ }
       }
-      return describeChampion({
+      return { modelId: current.modelId, setupVersion: state.meta?.setupVersion ?? null, ...describeChampion({
         state, checkpointExists, pythonExists, meta: current.meta, running,
+        allowLegacySetup: true,
         catalogMatches: catalog ? canonicalCatalog(catalog) === canonicalCatalog(current.catalog) : true,
-      });
+      }) };
     } catch {
-      return { status: 'unavailable', code: 'AI_NOT_AVAILABLE', method: 'policy-only', source: 'continuous-champion', generation: null, running: false };
+      return { modelId, status: 'unavailable', code: 'AI_NOT_AVAILABLE', method: 'policy-only', source: 'continuous-champion', generation: null, running: false };
     }
+  }
+  async function status(catalog, modelId) {
+    const current = await modelConfig(modelId);
+    const defaultModel = await modelConfig();
+    const entries = await fs.readdir(path.join(root, '.local/ai'), { withFileTypes: true }).catch(() => []);
+    const ids = new Set([current.modelId, defaultModel.modelId, ...entries.filter((item) => item.isDirectory() && /^continuous-r\d+$/.test(item.name))
+      .map((item) => item.name.replace('continuous-', ''))]);
+    const models = await Promise.all([...ids].sort((a, b) => Number(b.slice(1)) - Number(a.slice(1)))
+      .map((id) => modelStatus(catalog, id)));
+    return { ...models.find((item) => item.modelId === current.modelId), models, selectedModel: current.modelId };
   }
   async function closeWorker() {
     const current = worker;
     worker = null;
     await current?.close();
   }
-  async function ensureWorker(generation) {
-    if (worker?.generation === generation) return worker;
+  async function ensureWorker(modelId, generation, legacySetup) {
+    if (worker?.generation === generation && worker?.modelId === modelId) return worker;
     await closeWorker();
-    const current = await config();
+    const current = await modelConfig(modelId);
     const python = await resolvePython(root, current.python);
     worker = await createChampionWorker({
       root, python, loop: current.loop, generation,
+      legacySetup,
       timeoutMilliseconds: Math.max(Number(current.timeoutMilliseconds) || 30000, 60000),
     });
+    worker.modelId = modelId;
     return worker;
   }
-  async function inferNow(generation, observation) {
-    if (inferModel) return inferModel(observation, generation);
+  async function inferNow(modelId, generation, legacySetup, observation) {
+    if (inferModel) return inferModel(observation, generation, modelId);
     try {
-      const current = await ensureWorker(generation);
+      const current = await ensureWorker(modelId, generation, legacySetup);
       return await current.infer({
         meta: (await config()).meta,
         observation: { state: observation.state, candidates: observation.candidates },
@@ -121,25 +143,30 @@ export function createPlayAi({ root = projectRoot, inferModel, settings: injecte
       throw error;
     }
   }
-  function infer(generation, observation) {
-    const run = inferQueue.then(() => inferNow(generation, observation), () => inferNow(generation, observation));
+  function infer(modelId, generation, legacySetup, observation) {
+    const task = () => inferNow(modelId, generation, legacySetup, observation);
+    const run = inferQueue.then(task, task);
     inferQueue = run.then(() => {}, () => {});
     return run;
   }
-  async function assignSeat(session, seat) {
+  async function assignSeat(session, seat, modelId) {
     if (seat === null) {
       session.aiSeat = null;
       session.aiPaused = false;
       session.aiGeneration = null;
+      session.aiModel = null;
+      session.aiLegacySetup = false;
       return { seat: null, generation: null };
     }
     if (seat !== '0' && seat !== '1') fail('AI_SEAT_INVALID');
-    const availability = await status(session.client.getState().G.catalog);
+    const availability = await status(session.client.getState().G.catalog, modelId);
     if (availability.status !== 'available') fail(availability.code ?? 'AI_NOT_AVAILABLE');
     session.aiSeat = seat;
     session.aiPaused = false;
     session.aiGeneration = availability.generation;
-    return { seat, generation: availability.generation };
+    session.aiModel = availability.selectedModel;
+    session.aiLegacySetup = availability.legacySetup;
+    return { seat, generation: availability.generation, modelId: session.aiModel };
   }
   async function play(session) {
     if (!session.aiSeat) return { played: 0, reason: 'not-enabled', method: 'policy-only' };
@@ -152,7 +179,7 @@ export function createPlayAi({ root = projectRoot, inferModel, settings: injecte
     if (!session.aiGeneration) fail('AI_CHAMPION_INVALID');
     const environment = new TrainingEnvironment(current.catalog, current.weights);
     environment.restore(exportLocalMatch(match));
-    const result = await playOpponentSeat(environment, (observation) => infer(session.aiGeneration, observation), {
+    const result = await playOpponentSeat(environment, (observation) => infer(session.aiModel, session.aiGeneration, session.aiLegacySetup, observation), {
       seat: session.aiSeat, generation: session.aiGeneration,
     });
     if (result.model && result.model !== session.aiGeneration) fail('AI_CHAMPION_CHANGED');
@@ -174,10 +201,11 @@ export function createPlayAi({ root = projectRoot, inferModel, settings: injecte
   return { status, assignSeat, play, close: closeWorker };
 }
 
-export function createChampionWorker({ root, python, loop, generation, timeoutMilliseconds }) {
-  if (!/^generation-\d{5}$/.test(generation)) fail('AI_CHAMPION_INVALID');
+export function createChampionWorker({ root, python, loop, generation, timeoutMilliseconds, legacySetup = false }) {
+  if (generation !== 'initial' && !/^generation-\d{5}$/.test(generation)) fail('AI_CHAMPION_INVALID');
   const child = spawn(python, [
     path.join(root, 'scripts/infer-live.py'), '--loop', loop, '--generation', generation, '--stream',
+    ...(legacySetup ? ['--allow-legacy-setup'] : []),
   ], { cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let output = '';
   let pending = null;

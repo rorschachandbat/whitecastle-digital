@@ -29,6 +29,10 @@ details > summary { padding: 5px 0; }
 .savebar button { padding:7px 12px; font-size:12px; }
 .practice-note { font-size:12px; color:#756443; margin:18px 0; padding:10px 14px; border-left:3px solid #bc9552; background:#e8e0ce; }
 .practice-note p { max-width:1000px; }
+.rules-version { font-size:12px; padding:10px 14px; border-left:3px solid #6f8a62; background:#e1e8d9; }
+.layout-intro { border-left:4px solid #a77333; }
+.layout-intro button { margin-top:10px; }
+#layout-preview,#starting-draft { scroll-margin-top:16px; }
 .roundbar { background:#263f38; color:white; display:flex; gap:24px; align-items:center; padding:14px 20px; border-radius:6px; margin:16px 0; }
 .roundbar .muted { color:#c4cbbb; margin-left:auto; }
 .player-color { border-bottom:2px solid #c98957; }

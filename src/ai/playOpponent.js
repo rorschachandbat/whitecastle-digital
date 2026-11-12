@@ -27,7 +27,7 @@ export function policyChoice(policy, count) {
 
 function acceptInference(result, count, generation) {
   if (result?.source !== 'continuous-champion' || result.method !== 'policy-only'
-    || !/^generation-\d{5}$/.test(result.model ?? '')) fail('AI_INVALID_POLICY');
+    || !(result.model === 'initial' || /^generation-\d{5}$/.test(result.model ?? ''))) fail('AI_INVALID_POLICY');
   if (generation && result.model !== generation) fail('AI_CHAMPION_CHANGED');
   return { index: policyChoice(result.policy, count), model: result.model };
 }

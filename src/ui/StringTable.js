@@ -281,6 +281,8 @@ export const StringTable = Object.freeze({
   'play.dieSelected': '已选 {color} · {side} · {value}点；请选择高亮位置。',
   'play.gardenCost': '食物 {cost} · 终局 {points}分',
   'play.figuresOn': '人员：{players}',
+  'play.gardenEmpty': '还没有园丁',
+  'play.gardenOwner': '{who}的园丁',
   'play.gardens': '桥畔花园',
   'play.yards': '训练场',
   'play.yard': '{cost}铁训练区',

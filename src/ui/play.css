@@ -166,3 +166,8 @@ footer { margin-top:20px; border-top:1px solid #cfcebf; padding-top:16px; color:
 .room.is-empty, .utility.is-empty, .personal-row.is-empty { box-shadow: inset 4px 0 0 #d2cbb4; }
 .slot-label.fresh { background: #a77333; }
 .die-token.just-placed { outline: 3px solid #c2973f; outline-offset: 3px; }
+.card.has-die { box-shadow: inset 4px 0 0 #6f8a62; }
+.card.is-empty { box-shadow: inset 4px 0 0 #d2cbb4; }
+.person-token { display: inline-flex; align-items: center; min-height: 40px; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 750; border-left: 8px solid #bc7b55; background: #f6e4d6; color: #3d2a1c; }
+.person-token.p1 { border-left-color: #4f7f99; background: #e3eef4; color: #1d3340; }
+.person-token.just-placed { outline: 3px solid #c2973f; outline-offset: 3px; }

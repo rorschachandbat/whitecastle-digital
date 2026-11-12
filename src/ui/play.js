@@ -422,14 +422,39 @@ function bridgesView() {
       const card = byCard(garden.cardId);
       const node = cardView(card, true);
       node.append(el('small', text('play.gardenCost', { cost: card.foodCost, points: card.victoryPoints })));
-      const people = Object.entries(match.state.players).filter(([, player]) => player.figures.gardener.some((figure) => figure.cardId === card.id)).map(([id]) => playerName(id));
-      if (people.length) node.append(el('p', text('play.figuresOn', { players: people.join(' · ') }), 'figures'));
+      gardenOccupancy(node, card.id);
       lane.append(node);
     }
     grid.append(lane);
   }
   section.append(grid);
   return section;
+}
+
+function personLabel(id) {
+  if (!aiSeat) return playerName(id);
+  return text(id === aiSeat ? 'play.story.whoAi' : 'play.story.whoYou', { player: playerName(id) });
+}
+function gardenOccupancy(parent, cardId) {
+  const owners = Object.entries(session.match.state.players)
+    .filter(([, player]) => player.figures.gardener.some((figure) => figure.cardId === cardId))
+    .map(([id]) => id);
+  const action = session.match.actions.at(-1);
+  const fresh = Boolean(action?.decisions?.some((decision) => decision?.type === 'gardener' && decision.cardId === cardId && !decision.skip));
+  const row = el('div', null, 'occupancy');
+  if (!owners.length) {
+    parent.classList.add('is-empty');
+    row.append(el('span', text('play.gardenEmpty'), 'empty-slot'));
+  } else {
+    parent.classList.add('has-die');
+    row.append(el('span', text(fresh ? 'play.justPlaced' : 'play.slotTaken'), fresh ? 'slot-label fresh' : 'slot-label taken'));
+    for (const id of owners) {
+      const token = el('span', text('play.gardenOwner', { who: personLabel(id) }), `person-token p${id}`);
+      if (fresh && action.actor === id) token.classList.add('just-placed');
+      row.append(token);
+    }
+  }
+  parent.append(row);
 }
 function yardsView() {
   const { state, config } = session.match;

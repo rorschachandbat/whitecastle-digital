@@ -1,5 +1,12 @@
 # 工具脚本 CHANGELOG
 
+## 2026-11-12 — 练习页冠军对手
+
+- 新增 `play-ai.mjs`，从脚本位置和 `data/bga-live-ai.json` 读取冠军目录与Python环境；只读检查点，不改训练文件。推理请求串行，避免两个页签写串结果。
+- `infer-live.py` 增加可选 `--generation`，只接受循环目录内 `generation-#####/candidate.pt`。未传时仍解析当前冠军，BGA侧栏行为不变。
+- `serve-play.mjs` 增加席位、落子和暂停接口。动作、撤销和AI落子排队，撤销在人机时暂停。
+- 本机第117代冠军经模块调用和临时HTTP端口完成选牌、交回人类回合及撤销暂停。未构建。跨分支需连同 `src/ai/playOpponent.js`、`data/bga-live-ai.json` 复制；Python与权重留在目标机器 `.local/`。
+
 ## 2026-11-12 — 优先复用已有侧栏
 
 - `bga-live.ps1` 先遍历配置端口起的10个候选，优先复用同工作副本、协议5的服务，再启动第一个空闲端口；TCP占用即视为占用，非HTTP服务不再被误判为空闲。旧服务和其他副本不自动清理。

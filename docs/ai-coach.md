@@ -104,6 +104,10 @@ node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r4.jso
 
 完成这种本地输入输出链路后，后续搜索和网页读取可以共用它，避免另写一套规则。
 
+## 本地人机对打
+
+`npm run play` 打开的练习页可以在确认后把玩家1或玩家2交给当前冠军。模型只看公开特征，逐项选择合法动作，完整动作仍由原规则引擎和 boardgame.io Client 提交。撤销会暂停AI。它不是带机会节点的搜索，不能把策略偏好说成胜率，也不能用存档种子预测未来骰子。详见 [本地试玩](local-play.md)。
+
 ## 怎样做成围棋分析那样
 
 目标链路为：

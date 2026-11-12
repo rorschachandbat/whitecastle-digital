@@ -2,7 +2,7 @@
 
 ## 当前交付
 
-当前已提供规则基准、两人可编辑目录、配置编辑器和同机双人三轮练习版。纯规则、逐步决策、boardgame.io Client及网页已接通；尚需核验完整板块随机摆设，再进入完整动作枚举、Yucata复盘和AI。当前验收入口见 [local-play.md](local-play.md)，API见 [engine-core.md](engine-core.md)。
+当前已提供规则基准、两人可编辑目录、配置编辑器、同机双人三轮练习版，以及确认后把一席交给冠军模型的本地人机。人机只贪心提交合法动作，不是MCTS。纯规则、逐步决策、boardgame.io Client及网页已接通；尚需核验完整板块随机摆设，再进入完整动作枚举、Yucata复盘和AI。当前验收入口见 [local-play.md](local-play.md)，API见 [engine-core.md](engine-core.md)。
 
 本计划描述后续工作，不代表完整规则引擎、网页对局、自动部署或 AI 已经完成。每个阶段完成时更新根目录及相关模块的 CHANGELOG，报告实际检查结果后提交、推送。
 

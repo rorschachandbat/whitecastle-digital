@@ -1,6 +1,7 @@
 """只加载持续训练冠军，校验编码指纹后输出主网络策略，不输出未校准价值。"""
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -9,21 +10,34 @@ import torch
 from ai_model import META_KEYS, infer, load_checkpoint
 
 
+def champion_checkpoint(loop, state, generation):
+    """只接受循环目录内的 generation-#####/candidate.pt，不跟随外部路径。"""
+    loop = loop.resolve()
+    if generation is None:
+        parts = str(state["champion"]).replace("\\", "/").split("/")
+        if len(parts) < 2 or parts[-1] != "candidate.pt":
+            raise ValueError("AI_CHAMPION_INVALID")
+        generation = parts[-2]
+    if not re.fullmatch(r"generation-\d{5}", generation or ""):
+        raise ValueError("AI_CHAMPION_INVALID")
+    checkpoint = (loop / generation / "candidate.pt").resolve()
+    if loop not in checkpoint.parents or not checkpoint.is_file():
+        raise ValueError("AI_CHAMPION_INVALID")
+    return checkpoint, generation
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--loop", type=Path, required=True)
+    parser.add_argument("--generation", default=None)
     parser.add_argument("--stream", action="store_true")
     args = parser.parse_args()
     request = json.loads(sys.stdin.readline()) if args.stream else json.load(sys.stdin)
     state = json.loads((args.loop / "loop-state.json").read_text(encoding="utf-8"))
     if any(state["meta"].get(key) != request["meta"].get(key) for key in META_KEYS):
         raise ValueError("AI_MODEL_CONFIG_MISMATCH")
-    # 只解析此循环自己的冠军；复制分支后旧绝对路径按目录内相对尾部定位。
-    champion = Path(state["champion"])
-    parts = str(champion).replace("\\", "/").split("/")
-    checkpoint_path = args.loop / parts[-2] / parts[-1]
-    if parts[-1] != "candidate.pt" or not parts[-2].startswith("generation-"):
-        raise ValueError("AI_CHAMPION_INVALID")
+    # 指定代数时固定该检查点；未指定时仍只解析当前冠军的目录内相对尾部。
+    checkpoint_path, generation = champion_checkpoint(args.loop, state, args.generation)
     torch.set_num_threads(2)
     model, _ = load_checkpoint(checkpoint_path, request["meta"])
     while True:
@@ -44,7 +58,7 @@ def main():
             policy = torch.stack(policies).mean(0)
         if not bool(torch.isfinite(policy).all()):
             raise ValueError("AI_NONFINITE_POLICY")
-        print(json.dumps({"model": parts[-2], "source": "continuous-champion",
+        print(json.dumps({"model": generation, "source": "continuous-champion",
                           "method": "policy-only", "policy": policy.tolist()}), flush=True)
         if not args.stream:
             break

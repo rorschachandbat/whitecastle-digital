@@ -7,6 +7,7 @@ import { createLocalClient, restoreLocalClient, submitLocalAction } from '../src
 import { exportLocalMatch } from '../src/engine/localMatch.js';
 import { probeLocalAction } from '../src/engine/actionOptions.js';
 import { parseCatalog } from '../src/data/catalog.js';
+import { createPlayAi } from './play-ai.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rawPort = process.argv[2] ?? '4176';
@@ -14,6 +15,7 @@ if (!/^\d+$/.test(rawPort) || Number(rawPort) < 1024 || Number(rawPort) > 65535)
 const port = Number(rawPort);
 const origin = `http://127.0.0.1:${port}`;
 const sessions = new Map();
+const playAi = createPlayAi({ root });
 const sourceRoutes = [
   'src/ui/play.js', 'src/ui/play.css', 'src/ui/StringTable.js', 'src/ui/configEditor.js', 'src/ui/styles.css',
   'src/engine/actionOptions.js', 'src/engine/localMatch.js', 'src/engine/engine.js',
@@ -45,45 +47,88 @@ async function bodyOf(request) {
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
-function view(id, client) {
-  const { G, ctx } = client.getState();
-  return { id, match: G, framework: { currentPlayer: ctx.currentPlayer, turn: ctx.turn, gameover: ctx.gameover ?? null } };
+function view(id, session) {
+  const { G, ctx } = session.client.getState();
+  return {
+    id, match: G, framework: { currentPlayer: ctx.currentPlayer, turn: ctx.turn, gameover: ctx.gameover ?? null },
+    ai: {
+      seat: session.aiSeat, paused: session.aiPaused, generation: session.aiGeneration,
+      method: session.aiSeat ? 'policy-only' : null,
+    },
+  };
+}
+function openSession(client) {
+  const id = randomUUID();
+  sessions.set(id, { client, aiSeat: null, aiPaused: false, aiGeneration: null, aiQueue: Promise.resolve() });
+  return id;
+}
+function failUndo() { throw Object.assign(new Error('INVALID_ACTION'), { code: 'INVALID_ACTION' }); }
+function enqueue(session, task) {
+  const run = session.aiQueue.then(task, task);
+  session.aiQueue = run.then(() => {}, () => {});
+  return run;
 }
 const server = http.createServer(async (request, response) => {
   if (request.headers.host !== `127.0.0.1:${port}` && request.headers.host !== `localhost:${port}`) return json(response, 403, { code: 'ORIGIN_REJECTED' });
   if (request.headers.origin && ![origin, `http://localhost:${port}`].includes(request.headers.origin)) return json(response, 403, { code: 'ORIGIN_REJECTED' });
   const url = new URL(request.url, origin);
   try {
+    if (url.pathname === '/api/ai-status' && request.method === 'GET') {
+      const id = url.searchParams.get('id');
+      const session = id ? sessions.get(id) : null;
+      if (id && !session) return json(response, 404, { code: 'SESSION_NOT_FOUND' });
+      return json(response, 200, await playAi.status(session?.client.getState().G.catalog));
+    }
     if (url.pathname === '/api/session' && request.method === 'POST') {
       if (sessions.size >= 24) return json(response, 409, { code: 'SESSION_LIMIT' });
       const data = await bodyOf(request);
       const catalog = data.catalog ? parseCatalog(JSON.stringify(data.catalog))
         : parseCatalog(await fs.readFile(path.join(root, 'data/whitecastle-2p.json'), 'utf8'));
       const client = data.save ? restoreLocalClient(data.save) : createLocalClient(catalog, { seed: data.seed ?? 'whitecastle-local-v1' });
-      const id = randomUUID();
-      sessions.set(id, client);
-      return json(response, 200, view(id, client));
+      const id = openSession(client);
+      return json(response, 200, view(id, sessions.get(id)));
     }
     if (url.pathname.startsWith('/api/')) {
       const data = request.method === 'GET' ? { id: url.searchParams.get('id') } : await bodyOf(request);
-      const client = sessions.get(data.id);
-      if (!client) return json(response, 404, { code: 'SESSION_NOT_FOUND' });
-      if (url.pathname === '/api/state' && request.method === 'GET') return json(response, 200, view(data.id, client));
-      if (url.pathname === '/api/probe' && request.method === 'POST') return json(response, 200, probeLocalAction(client.getState().G, data.action));
+      const session = sessions.get(data.id);
+      if (!session) return json(response, 404, { code: 'SESSION_NOT_FOUND' });
+      if (url.pathname === '/api/state' && request.method === 'GET') return json(response, 200, view(data.id, session));
+      if (url.pathname === '/api/probe' && request.method === 'POST') return json(response, 200, probeLocalAction(session.client.getState().G, data.action));
       if (url.pathname === '/api/action' && request.method === 'POST') {
-        submitLocalAction(client, data.action);
-        return json(response, 200, view(data.id, client));
+        await enqueue(session, async () => {
+          submitLocalAction(session.client, data.action);
+          session.aiPaused = false;
+        });
+        return json(response, 200, view(data.id, session));
+      }
+      if (url.pathname === '/api/ai-seat' && request.method === 'POST') {
+        await enqueue(session, () => playAi.assignSeat(session, data.seat ?? null));
+        return json(response, 200, view(data.id, session));
+      }
+      if (url.pathname === '/api/ai-pause' && request.method === 'POST') {
+        session.aiPaused = Boolean(data.paused);
+        return json(response, 200, view(data.id, session));
+      }
+      if (url.pathname === '/api/ai-move' && request.method === 'POST') {
+        const move = await enqueue(session, () => playAi.play(session));
+        const payload = view(data.id, session);
+        payload.ai = { ...payload.ai, ...move };
+        return json(response, 200, payload);
       }
       if (url.pathname === '/api/undo' && request.method === 'POST') {
-        const save = exportLocalMatch(client.getState().G);
-        save.actions.pop();
-        const replacement = restoreLocalClient(save);
-        client.stop();
-        sessions.set(data.id, replacement);
-        return json(response, 200, view(data.id, replacement));
+        await enqueue(session, async () => {
+          const save = exportLocalMatch(session.client.getState().G);
+          if (!save.actions.length) failUndo();
+          save.actions.pop();
+          const replacement = restoreLocalClient(save);
+          session.client.stop();
+          session.client = replacement;
+          if (session.aiSeat) session.aiPaused = true;
+        });
+        return json(response, 200, view(data.id, session));
       }
       if (url.pathname === '/api/delete' && request.method === 'POST') {
-        client.stop();
+        session.client.stop();
         sessions.delete(data.id);
         return json(response, 200, { ok: true });
       }
@@ -98,9 +143,16 @@ const server = http.createServer(async (request, response) => {
     json(response, 400, { code: error.code ?? 'INVALID_REQUEST' });
   }
 });
-server.on('close', () => { for (const client of sessions.values()) client.stop(); });
+server.on('close', () => {
+  for (const session of sessions.values()) session.client.stop();
+  playAi.close();
+});
 server.on('error', (error) => { console.error(`本地对局服务启动失败：${error.message}`); process.exitCode = 1; });
 server.listen(port, '127.0.0.1', () => {
-  console.log(`本地双人练习：${origin}/play.html`);
-  console.log('boardgame.io在本机承载对局；不运行Vite、不编译。按Ctrl+C停止。');
+  console.log(`本地练习：${origin}/play.html`);
+  console.log('可双人轮流，也可在页面确认后把另一席交给冠军模型。不运行Vite、不编译。按Ctrl+C停止。');
+});
+process.on('SIGINT', () => {
+  playAi.close();
+  server.close();
 });

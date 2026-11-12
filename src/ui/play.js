@@ -7,6 +7,7 @@ import { parseCatalog } from '../data/catalog.js';
 const root = document.querySelector('#play');
 const STORAGE = 'whitecastle.local.play.v1';
 const SESSION = 'whitecastle.local.session.v1';
+const AI_KEY = 'whitecastle.local.ai.v1';
 let session;
 let selectedDie;
 let probe;
@@ -17,6 +18,10 @@ let busy = false;
 let message = '';
 let seed = 'himeji-2026';
 let order = [];
+let aiSeat = null;
+let aiPaused = false;
+let aiAvailability = null;
+let humanSeat = '0';
 document.title = text('play.title');
 
 const el = (tag, content, className = '') => {
@@ -36,13 +41,61 @@ const roomName = (id) => {
 };
 const fieldName = (id) => StringTable[`play.field.${id}`] ? text(`play.field.${id}`) : id;
 const errorText = (code) => StringTable[`play.error.${code}`] ? text(`play.error.${code}`) : text('play.error.other', { code });
-const button = (title, action, className = '') => {
+const button = (title, action, className = '', options = {}) => {
   const node = el('button', title, className);
   node.type = 'button';
-  node.disabled = busy;
+  node.disabled = busy || (opponentTurn() && !options.allowDuringOpponent);
   node.addEventListener('click', () => run(action));
   return node;
 };
+function readAiPreference() {
+  try {
+    const value = JSON.parse(localStorage.getItem(AI_KEY) ?? 'null');
+    return value?.seat === '0' || value?.seat === '1' ? value.seat : null;
+  } catch { return null; }
+}
+function generationLabel(generation) {
+  const value = Number(String(generation ?? '').replace('generation-', ''));
+  return Number.isInteger(value) && value >= 0 ? String(value) : text('play.none');
+}
+function opponentTurn() {
+  return Boolean(session && aiSeat && activeLocalPlayer(session.match) === aiSeat);
+}
+function adopt(next) {
+  session = next;
+  aiSeat = next?.ai?.seat ?? null;
+  aiPaused = Boolean(next?.ai?.paused);
+  return next;
+}
+function assertHumanTurn() {
+  if (opponentTurn()) throw Object.assign(new Error('AI_TURN'), { code: 'AI_TURN' });
+}
+async function refreshAiAvailability() {
+  try {
+    aiAvailability = await api(session ? `ai-status?id=${encodeURIComponent(session.id)}` : 'ai-status');
+  } catch {
+    aiAvailability = { status: 'unavailable', code: 'AI_NOT_AVAILABLE' };
+  }
+}
+async function playAiIfNeeded() {
+  let guard = 0;
+  while (session && aiSeat && !aiPaused && session.match.phase !== 'finished' && activeLocalPlayer(session.match) === aiSeat) {
+    if (++guard > 12) throw Object.assign(new Error('AI_DECISION_LIMIT'), { code: 'AI_DECISION_LIMIT' });
+    message = text('play.ai.thinking');
+    render();
+    const result = adopt(await api('ai-move', { id: session.id }));
+    resetWizard();
+    const played = result.ai?.played ?? 0;
+    if (played > 0) message = text('play.ai.moved', { n: played, generation: generationLabel(result.ai.generation) });
+    if (!result.ai?.bounded) break;
+  }
+  autosave();
+}
+async function applyStoredAi() {
+  const seat = readAiPreference();
+  if (!session || !seat) return;
+  adopt(await api('ai-seat', { id: session.id, seat }));
+}
 async function api(route, body) {
   const response = await fetch(`/api/${route}`, body === undefined ? undefined : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -76,23 +129,35 @@ function resetWizard() {
 }
 async function newSession(body) {
   const previous = session?.id;
-  const next = await api('session', body);
-  session = next;
+  adopt(await api('session', body));
   resetWizard();
   message = '';
+  try {
+    await applyStoredAi();
+  } catch (error) {
+    localStorage.removeItem(AI_KEY);
+    aiSeat = null;
+    aiPaused = false;
+    message = text('play.failed', { reason: errorText(error.code ?? 'NETWORK') });
+  }
+  await refreshAiAvailability();
   autosave();
   if (previous && previous !== session.id) await api('delete', { id: previous }).catch(() => {});
+  if (!message) await playAiIfNeeded();
 }
 async function beginAction(action, remember = false) {
+  assertHumanTurn();
   if (remember && probe) wizardHistory.push(structuredClone(probe.action));
   probe = await api('probe', { id: session.id, action });
   order = probe.request?.effects?.map((_, index) => index) ?? [];
 }
 async function commitAction(action) {
-  session = await api('action', { id: session.id, action });
+  assertHumanTurn();
+  adopt(await api('action', { id: session.id, action }));
   resetWizard();
   autosave();
   message = '';
+  await playAiIfNeeded();
 }
 function download(value, name) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
@@ -182,14 +247,17 @@ function header() {
   editor.href = './config-editor.html';
   editor.target = '_blank';
   editor.rel = 'noopener';
-  links.append(el('span', text('play.practice'), 'pill'), editor);
+  links.append(el('span', text(aiSeat ? 'play.ai.pill' : 'play.practice'), 'pill'), editor);
   head.append(brand, links);
   root.append(head, setupControls());
   if (!session) return;
   const tools = el('div', null, 'toolbar savebar');
-  const undo = button(text('play.undo'), async () => {
-    session = await api('undo', { id: session.id }); resetWizard(); autosave();
-  }, 'quiet');
+  const undo = button(text(aiSeat ? 'play.ai.undo' : 'play.undo'), async () => {
+    adopt(await api('undo', { id: session.id }));
+    resetWizard();
+    autosave();
+    if (aiPaused) message = text('play.ai.paused');
+  }, 'quiet', { allowDuringOpponent: true });
   undo.disabled = busy || session.match.actions.length === 0;
   tools.append(undo, button(text('play.save'), () => { autosave(); message = text('play.saved'); }, 'quiet'),
     button(text('play.load'), async () => {
@@ -203,6 +271,7 @@ function header() {
   const notice = el('details', null, 'practice-note');
   notice.append(el('summary', text('play.warnings')), el('p', text('play.practiceNotice')));
   for (const warning of session.match.profile.warnings) notice.append(el('p', text(`play.warning.${warning}`)));
+  if (aiSeat) notice.append(el('p', text('play.ai.undoHint')));
   root.append(notice);
   if (message) {
     const alert = el('p', message, 'message');
@@ -230,7 +299,7 @@ function draftView() {
     item.append(cardView(byCard(pair.resourceId)), cardView(byCard(pair.actionId)));
     const choice = button(pair.chosenBy !== null ? text('play.chosen', { n: Number(pair.chosenBy) + 1 }) : text('play.choosePair'),
       () => beginAction({ type: 'chooseStartingPair', actor: activeLocalPlayer(match), pairId: pair.id }));
-    choice.disabled = busy || pair.chosenBy !== null;
+    choice.disabled = busy || opponentTurn() || pair.chosenBy !== null;
     item.append(choice);
     grid.append(item);
   }
@@ -294,7 +363,7 @@ function bridgesView() {
         message = '';
       }, `die ${bridge.color} ${selectedDie?.bridgeId === bridge.id && selectedDie?.side === side ? 'selected' : ''}`);
       node.setAttribute('aria-label', `${text(`play.color.${bridge.color}`)} · ${side ? text(`play.${side}`) : text('play.middle')} · ${text('play.die', { value: die.value })}`);
-      node.disabled = busy || side === null || match.phase !== 'playing' || Boolean(probe);
+      node.disabled = busy || opponentTurn() || side === null || match.phase !== 'playing' || Boolean(probe);
       holder.append(node, el('small', side ? text(`play.${side}`) : text('play.middle')));
       dice.append(holder);
     }
@@ -419,7 +488,7 @@ function exchanges(parent, actor, player, chained = false) {
         await beginAction(actionDraft, true);
       } else await commitAction(action);
     }, 'quiet');
-    btn.disabled = busy || player.resources.seal < amount;
+    btn.disabled = busy || opponentTurn() || player.resources.seal < amount;
     buttons.append(btn);
   };
   make(1);
@@ -427,10 +496,64 @@ function exchanges(parent, actor, player, chained = false) {
   group.append(buttons);
   parent.append(group);
 }
+function aiPanel() {
+  const panel = el('section', null, 'ai-panel');
+  panel.append(el('h3', text('play.ai.title')), el('p', text('play.ai.notice'), 'muted'));
+  const status = aiAvailability?.status;
+  if (status === 'available' && aiAvailability.generation) {
+    panel.append(el('p', text('play.ai.champion', { generation: generationLabel(aiAvailability.generation) }), 'muted'));
+  } else if (status === 'incompatible') panel.append(el('p', text('play.ai.incompatible'), 'error'));
+  else if (status === 'catalog-mismatch') panel.append(el('p', text('play.ai.catalog'), 'error'));
+  else panel.append(el('p', text('play.ai.unavailable'), 'error'));
+  if (aiSeat) {
+    panel.append(el('p', text(opponentTurn() ? 'play.ai.turn' : 'play.ai.seated', { generation: generationLabel(session.ai?.generation), player: playerName(aiSeat) })));
+    panel.append(el('p', text('play.ai.method'), 'muted'));
+    if (aiPaused) panel.append(el('p', text('play.ai.paused')));
+    const actions = el('div', null, 'toolbar');
+    if (opponentTurn()) actions.append(button(text('play.ai.resume'), async () => {
+      adopt(await api('ai-pause', { id: session.id, paused: false }));
+      message = '';
+      await playAiIfNeeded();
+    }, '', { allowDuringOpponent: true }));
+    actions.append(button(text('play.ai.disable'), async () => {
+      localStorage.removeItem(AI_KEY);
+      adopt(await api('ai-seat', { id: session.id, seat: null }));
+      message = text('play.ai.off');
+    }, 'quiet', { allowDuringOpponent: true }));
+    panel.append(actions);
+  } else {
+    const select = el('select');
+    for (const seat of ['0', '1']) {
+      const option = el('option', text(seat === '0' ? 'play.ai.human0' : 'play.ai.human1'));
+      option.value = seat;
+      if (seat === humanSeat) option.selected = true;
+      select.append(option);
+    }
+    select.addEventListener('change', () => { humanSeat = select.value; });
+    const confirm = button(text('play.ai.confirm'), async () => {
+      const seat = humanSeat === '0' ? '1' : '0';
+      localStorage.setItem(AI_KEY, JSON.stringify({ seat }));
+      adopt(await api('ai-seat', { id: session.id, seat }));
+      message = text('play.ai.confirmed', {
+        generation: generationLabel(session.ai?.generation), human: playerName(humanSeat), ai: playerName(seat),
+      });
+      await playAiIfNeeded();
+    }, 'confirm', { allowDuringOpponent: true });
+    confirm.disabled = busy || status !== 'available';
+    panel.append(select, confirm);
+  }
+  return panel;
+}
 function wizardView() {
   const aside = el('aside', null, 'action-tray');
-  aside.append(el('div', text('play.connected'), 'eyebrow'), el('h2', text('play.actionTitle')));
+  aside.append(el('div', text(aiSeat ? 'play.ai.connected' : 'play.connected'), 'eyebrow'), el('h2', text('play.actionTitle')), aiPanel());
   const actor = activeLocalPlayer(session.match);
+  if (opponentTurn()) {
+    aside.append(el('p', text(aiPaused ? 'play.ai.paused' : 'play.ai.turn', {
+      generation: generationLabel(session.ai?.generation), player: playerName(actor),
+    }), aiPaused ? '' : 'ai-thinking'));
+    return aside;
+  }
   if (probe) {
     if (probe.status === 'choice') {
       const request = probe.request;
@@ -446,10 +569,10 @@ function wizardView() {
           row.append(el('span', effects([request.effects[index]])));
           const up = button('↑', () => { [order[position - 1], order[position]] = [order[position], order[position - 1]]; });
           up.setAttribute('aria-label', text('play.moveUp'));
-          up.disabled = busy || position === 0;
+          up.disabled = busy || opponentTurn() || position === 0;
           const down = button('↓', () => { [order[position + 1], order[position]] = [order[position], order[position + 1]]; });
           down.setAttribute('aria-label', text('play.moveDown'));
-          down.disabled = busy || position === order.length - 1;
+          down.disabled = busy || opponentTurn() || position === order.length - 1;
           row.append(up, down);
           list.append(row);
         });
@@ -543,9 +666,27 @@ render();
 await run(async () => {
   const response = await fetch('/data/whitecastle-2p.json');
   defaultCatalog = parseCatalog(await response.text());
+  await refreshAiAvailability();
   const id = localStorage.getItem(SESSION);
   if (id) {
-    try { session = await api(`state?id=${encodeURIComponent(id)}`); return; } catch { /* 服务重启后通过动作记录恢复。 */ }
+    try {
+      adopt(await api(`state?id=${encodeURIComponent(id)}`));
+    } catch {
+      session = null;
+    }
+    if (session) {
+      try {
+        await applyStoredAi();
+        await refreshAiAvailability();
+        if (!message) await playAiIfNeeded();
+      } catch (error) {
+        localStorage.removeItem(AI_KEY);
+        aiSeat = null;
+        aiPaused = false;
+        message = text('play.failed', { reason: errorText(error.code ?? 'NETWORK') });
+      }
+      return;
+    }
   }
   const saved = localStorage.getItem(STORAGE);
   if (saved) {

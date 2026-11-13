@@ -1,13 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { prepareLiveAdvice } from '../src/integrations/bgaLiveAdvice.js';
+import { prepareLiveAdvice, getDraftSession } from '../src/integrations/bgaLiveAdvice.js';
 import { preparePlayingAdvice, rememberLiveContext, getPlayingSession, publicObservations } from '../src/integrations/bgaLivePlaying.js';
 import { prepareChainAdvice, describeLiveChoice, advancePublic } from '../src/integrations/bgaLiveChain.js';
 import { loadTrainingConfig, projectRoot } from './ai-common.mjs';
 import { FEATURE_VERSION } from '../src/ai/features.js';
 import { adjustPolicyForLantern } from '../src/ai/lanternEffects.js';
 import { createPlayAi, championGeneration } from './play-ai.mjs';
+import { searchRoutesAsync } from '../src/ai/routeSearch.js';
 
 const read = async (file) => JSON.parse(await fs.readFile(file, 'utf8'));
 const modelLabel = (value) => String(value ?? '').replaceAll('\\', '/').split('/').at(-2) ?? null;
@@ -76,7 +77,9 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
         profile: state.meta?.profile, running, generation: state.generation, phase: state.phase,
         completedSelfplayGames: state.completedSelfplayGames, champion, latest: modelLabel(state.latest),
         updatedAt: state.updatedAt, guideEvaluation: summary && { wins: summary.wins, games: summary.games,
-          averageMargin: summary.averageMargin }, modelSource: 'continuous-champion' };
+          averageMargin: summary.averageMargin, averageScore: summary.averageScore },
+        scoreStats: state.scoreStats ?? null, objective: state.config?.selectionObjective ?? 'win-loss',
+        modelSource: 'continuous-champion' };
     } catch { return { status: 'unavailable', modelSource: 'continuous-champion' }; }
   }
   async function analyze(latest, { modelId } = {}) {
@@ -114,7 +117,8 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
         if (result.model !== c.generation) fail('AI_CHAMPION_CHANGED');
         return result;
       };
-      const session = getPlayingSession(prepared);
+      const session = getPlayingSession(prepared) ?? getDraftSession(prepared);
+      const searchDeadline = Date.now() + Math.max(1000, (c.timeoutMilliseconds ?? 120000) - 5000);
       if (c.featureCompat && session) {
         session.env.lanternExpansion = false;
         prepared = { ...prepared, observation: session.env.observe(),
@@ -124,18 +128,37 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
       const adjust = (policy, env) => c.featureCompat ? adjustPolicyForLantern(policy, env, c.weights) : policy;
       let plan = null;
       let rootPolicy = result.policy;
+      let search = null;
       if (session) {
         const { env, uncertainPriority } = session;
         rootPolicy = adjust(result.policy, env);
+        if (c.search) {
+          search = await searchRoutesAsync(env, rootPolicy, { ...c.search, uncertainPriority });
+          rootPolicy = search.policy;
+        }
         let index = rootPolicy.indexOf(Math.max(...rootPolicy));
         plan = { rootIndex: index, steps: [], boundary: 'complete' };
-        for (let count = 0; count < 32; count += 1) {
+        for (let count = 0; prepared.scope !== 'starting-draft-only' && count < 32; count += 1) {
+          if (Date.now() >= searchDeadline) { plan.boundary = 'decision-limit'; break; }
           if (!advancePublic(env, index)) { plan.boundary = 'unknown-reveal'; break; }
           if (!env.pending) break;
           const observation = env.observe();
           const next = await infer(observation, publicObservations(env, uncertainPriority));
           if (next.model !== result.model) fail('AI_CHAMPION_CHANGED');
-          const adjusted = adjust(next.policy, env);
+          let adjusted = adjust(next.policy, env);
+          if (c.search) {
+            const remaining = searchDeadline - Date.now();
+            if (remaining <= 0) { plan.boundary = 'decision-limit'; break; }
+            try {
+              adjusted = (await searchRoutesAsync(env, adjusted, { ...c.search, uncertainPriority,
+                width: 2, samples: 1, maxDecisions: 32, timeoutMilliseconds: remaining })).policy;
+            } catch (error) {
+              // 根行动已经完成比较；续行预算耗尽时保留根建议并明确标记截断。
+              if (error.code !== 'AI_SEARCH_TIMEOUT') throw error;
+              plan.boundary = 'decision-limit';
+              break;
+            }
+          }
           index = adjusted.indexOf(Math.max(...adjusted));
           plan.steps.push({ ...describeLiveChoice(env, env.getLegalActions()[index], latest.archive.publicPosition),
             policyWeight: adjusted[index] });
@@ -144,9 +167,10 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
       }
       return { status: 'ready', actor: prepared.actor, scope: prepared.scope,
         modelId: c.modelId, legacySetup: c.legacySetup, lanternAdjusted: c.featureCompat,
-        model: result.model, source: result.source, method: 'policy-only',
-        plan, uncertainties: prepared.uncertainties ?? [],
-        candidates: prepared.candidates.map((candidate, index) => ({ ...candidate, policyWeight: rootPolicy[index] }))
+        model: result.model, source: result.source, method: search?.searched ? 'score-search' : 'policy-only',
+        search, plan, uncertainties: prepared.uncertainties ?? [],
+        candidates: prepared.candidates.map((candidate, index) => ({ ...candidate,
+          searchScore: search?.scores[index] ?? null, policyWeight: rootPolicy[index] }))
           .sort((a, b) => b.policyWeight - a.policyWeight) };
     } catch (error) {
       return { status: String(error.code ?? '').startsWith('BGA_') ? 'unsupported' : 'error',

@@ -1,4 +1,4 @@
-"""攻略模仿预热后进行终局胜负驱动的自我对弈；只支持当前练习规则。"""
+"""攻略模仿预热后以自身终局分数优化策略，并用公开路线搜索探索后续联动。"""
 import argparse
 import copy
 import gzip
@@ -14,7 +14,7 @@ from torch import nn
 from torch.distributions import Categorical
 
 from ai_model import (ROOT, META_KEYS, PolicyValue, RulesProcess, batch_tensors,
-                      infer, save_checkpoint, load_checkpoint)
+                      infer, save_checkpoint, load_checkpoint, REWARD_VERSION, SCORE_SCALE)
 
 
 def load_dataset(path, allow_partial=False):
@@ -48,7 +48,12 @@ def load_dataset(path, allow_partial=False):
             raise ValueError("AI_MIXED_DATA_VERSIONS")
         if len(row["state"]) != dimensions[0] or not row["candidates"]:
             raise ValueError("AI_BAD_STATE")
-        if not 0 <= row["teacher"] < len(row["candidates"]) or row["z"] not in ((0,) if partial else (-1, 1)):
+        valid_target = (row["z"] == 0 if partial else
+                        (isinstance(row.get("finalScore"), (int, float))
+                         and math.isfinite(row["finalScore"]) and row["finalScore"] >= 0
+                         and abs(row["z"] - row["finalScore"] / SCORE_SCALE) < 1e-6)
+                        if meta.get("rewardVersion") == REWARD_VERSION else row["z"] in (-1, 1))
+        if not 0 <= row["teacher"] < len(row["candidates"]) or not valid_target:
             raise ValueError("AI_BAD_TARGET")
         if partial and (row.get("valueWeight") != 0
                         or row.get("provenance", {}).get("kind") != "bga-verified-draft-v1"
@@ -121,11 +126,13 @@ def distill(model, optimizer, train, validation, epochs, rng):
 
 
 def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_games, resume=None,
-              league=None, experience_dir=None):
+              league=None, experience_dir=None, search_config=None):
     history = []
     # 固定预热快照作为对手，每局交换网络方座位；一半对局为共享网络自我对弈。
     opponent = copy.deepcopy(model).eval()
     previous = (resume or {}).get("selfplayTotal", 0)
+    score_stats = copy.deepcopy((resume or {}).get("scoreStats", {
+        "count": 0, "total": 0, "max": 0, "atLeast60": 0, "atLeast80": 0}))
     if resume and resume.get("opponentState"):
         opponent.load_state_dict(resume["opponentState"])
     if resume and resume.get("optimizer"):
@@ -143,6 +150,8 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
         rival = league[((previous + game) // 4) % len(league)] if mode in (2, 3) else opponent
         trajectory = []
         records = []
+        search_targets = []
+        search_nodes = 0
         while not observation["done"]:
             actor = observation["actor"]
             league_seat = str(((previous + game) // 4 + int(mode == 3)) % 2)
@@ -151,7 +160,18 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
             if learner:
                 model.train()
                 logits, value = infer(model, observation)
-                distribution = Categorical(logits=logits)
+                base = logits.softmax(-1)
+                search = None
+                if search_config and len(base) > 1:
+                    search = rules.request(op="search", policy=base.detach().tolist(), settings=search_config)
+                    search_nodes += search["nodes"]
+                if search and search["searched"]:
+                    target = torch.tensor(search["policy"], dtype=base.dtype)
+                    # 搜索分布与网络混合作为实际采样策略；对该分布求对数，避免离策略更新。
+                    distribution = Categorical(probs=0.9 * target + 0.1 * base)
+                    search_targets.append(-(target * logits.log_softmax(-1)).sum())
+                else:
+                    distribution = Categorical(logits=logits)
                 action = distribution.sample()
                 trajectory.append((actor, distribution.log_prob(action), value, distribution.entropy()))
                 index = action.item()
@@ -174,17 +194,30 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
         log_probs = torch.stack([item[1] for item in trajectory])
         values = torch.stack([item[2] for item in trajectory])
         entropy = torch.stack([item[3] for item in trajectory]).mean()
-        targets = torch.tensor([1.0 if observation["score"]["winner"] == item[0] else -1.0 for item in trajectory])
+        targets = torch.tensor([observation["score"]["players"][item[0]]["total"] / SCORE_SCALE
+                                for item in trajectory])
         advantages = targets - values.detach()
         loss = -(log_probs * advantages).mean() + 0.5 * nn.functional.mse_loss(values, targets) - 0.01 * entropy
+        if search_targets:
+            loss = loss + 0.25 * torch.stack(search_targets).mean()
         optimizer.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
         result = {"game": game + 1, "seed": seed, "loss": loss.item(), "entropy": entropy.item(),
                   "decisions": observation["decisions"], "score": observation["score"],
+                  "searchNodes": search_nodes,
+                  "learnerSeats": sorted({item[0] for item in trajectory}),
                   "opponent": "self" if mode == 0 else "guide" if mode == 1 else "history" if league else "legacy"}
         history.append(result)
+        for seat in result["learnerSeats"]:
+            final_score = result["score"]["players"][seat]["total"]
+            score_stats["count"] += 1
+            score_stats["total"] += final_score
+            score_stats["max"] = max(score_stats["max"], final_score)
+            score_stats["atLeast60"] += int(final_score >= 60)
+            score_stats["atLeast80"] += int(final_score >= 80)
+        score_stats["average"] = score_stats["total"] / score_stats["count"]
         if experience_dir:
             # 完整终局按种子写独立分片；当前优化器不重复采样旧经验。
             folder = Path(experience_dir)
@@ -193,7 +226,8 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
             temporary = shard.with_suffix(shard.suffix + ".tmp")
             with gzip.open(temporary, "wt", encoding="utf-8") as handle:
                 for row in records:
-                    row["z"] = 1 if observation["score"]["winner"] == row["actor"] else -1
+                    row["finalScore"] = observation["score"]["players"][row["actor"]]["total"]
+                    row["z"] = row["finalScore"] / SCORE_SCALE
                     handle.write(json.dumps(row) + "\n")
             temporary.replace(shard)
             shard.with_suffix(".manifest.json").write_text(
@@ -203,9 +237,10 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
         seen_games.add(seed)
         save_checkpoint(output, model, meta, phase="selfplay", selfplayTotal=previous + game + 1,
                         seenGames=sorted(seen_games), optimizer=optimizer.state_dict(),
-                        torchRng=torch.get_rng_state(), opponentState=opponent.state_dict())
+                        torchRng=torch.get_rng_state(), opponentState=opponent.state_dict(), scoreStats=score_stats)
         Path(str(output) + ".progress.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
         print(json.dumps({"phase": "selfplay", "game": game + 1, "loss": loss.item(),
+                          "learnerSeats": result["learnerSeats"], "searchNodes": search_nodes,
                           "scores": {key: item["total"] for key, item in result["score"]["players"].items()}}), flush=True)
     return history
 

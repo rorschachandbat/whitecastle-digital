@@ -23,6 +23,7 @@ export const isPlacementTitle = (title, subject) => [
   `${subject} 必须从桥中选择一个骰子，并将其放置在一个行动上`,
 ].includes(title?.trim());
 export const getPlayingSession = (prepared) => sessions.get(prepared);
+export const setPlayingSession = (prepared, session) => sessions.set(prepared, session);
 
 /** 缺少历史到达次序时，对两种时间优先关系平均；不把任意关系当作已知事实。 */
 export function publicObservations(env, uncertainPriority) {

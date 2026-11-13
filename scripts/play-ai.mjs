@@ -7,6 +7,7 @@ import { playOpponentSeat } from '../src/ai/playOpponent.js';
 import { activeLocalPlayer, exportLocalMatch } from '../src/engine/localMatch.js';
 import { restoreLocalClient, submitLocalAction } from '../src/game/localClient.js';
 import { loadTrainingConfig, projectRoot } from './ai-common.mjs';
+import { searchRoutesAsync } from '../src/ai/routeSearch.js';
 
 function fail(code) {
   throw Object.assign(new Error(code), { code });
@@ -166,6 +167,7 @@ export function createPlayAi({ root = projectRoot, inferModel, settings: injecte
     session.aiGeneration = availability.generation;
     session.aiModel = availability.selectedModel;
     session.aiLegacySetup = availability.legacySetup;
+    session.aiMethod = (await config()).search ? 'score-search' : 'policy-only';
     return { seat, generation: availability.generation, modelId: session.aiModel };
   }
   async function play(session) {
@@ -179,7 +181,12 @@ export function createPlayAi({ root = projectRoot, inferModel, settings: injecte
     if (!session.aiGeneration) fail('AI_CHAMPION_INVALID');
     const environment = new TrainingEnvironment(current.catalog, current.weights);
     environment.restore(exportLocalMatch(match));
-    const result = await playOpponentSeat(environment, (observation) => infer(session.aiModel, session.aiGeneration, session.aiLegacySetup, observation), {
+    const result = await playOpponentSeat(environment, async (observation) => {
+      const inference = await infer(session.aiModel, session.aiGeneration, session.aiLegacySetup, observation);
+      if (!current.search) return inference;
+      const search = await searchRoutesAsync(environment, inference.policy, current.search);
+      return { ...inference, method: search.searched ? 'score-search' : 'policy-only', policy: search.policy };
+    }, {
       seat: session.aiSeat, generation: session.aiGeneration,
     });
     if (result.model && result.model !== session.aiGeneration) fail('AI_CHAMPION_CHANGED');
@@ -195,7 +202,7 @@ export function createPlayAi({ root = projectRoot, inferModel, settings: injecte
     return {
       played: result.actions.length, decisions: result.decisions, bounded: result.bounded,
       generation: session.aiGeneration, generationNumber: generationNumber(session.aiGeneration),
-      method: 'policy-only', reason: result.bounded ? 'bounded' : (result.done ? 'finished' : 'human-turn'),
+      method: result.method, reason: result.bounded ? 'bounded' : (result.done ? 'finished' : 'human-turn'),
     };
   }
   return { status, assignSeat, play, close: closeWorker };

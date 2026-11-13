@@ -21,7 +21,7 @@ def wilson(wins, games):
 
 def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitation_path=None,
              prefix="ai-eval-v1", catalog=None, weights=None, forbidden_seeds=(), stop=None,
-             frozen_path=None):
+             frozen_path=None, search_config=None):
     """评估种子只作选模用途；调用方负责保留最终一次性测试集。"""
     output = Path(output)
     if output.exists():
@@ -61,7 +61,12 @@ def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitati
                             network = model if actor == seat else (imitation if opponent == "imitation" else frozen)
                             with torch.no_grad():
                                 logits, _ = infer(network, observation)
-                                index = logits.argmax().item()
+                                if search_config:
+                                    search = rules.request(op="search", policy=logits.softmax(-1).tolist(),
+                                                           settings={**search_config, "seed": f"{seed}:{observation['decisions']}"})
+                                    index = max(range(len(search["policy"])), key=search["policy"].__getitem__)
+                                else:
+                                    index = logits.argmax().item()
                         elif opponent == "guide":
                             index = max(range(len(observation["heuristic"])), key=observation["heuristic"].__getitem__)
                         else:
@@ -85,9 +90,12 @@ def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitati
                              "wilson95Approx": wilson(wins, len(subset)),
                              "averageScore": sum(game["ownScore"] for game in subset) / len(subset),
                              "averageOpponentScore": sum(game["opponentScore"] for game in subset) / len(subset),
-                             "averageMargin": sum(game["margin"] for game in subset) / len(subset)}
+                             "averageMargin": sum(game["margin"] for game in subset) / len(subset),
+                             "maximumScore": max(game["ownScore"] for game in subset),
+                             "atLeast60": sum(game["ownScore"] >= 60 for game in subset),
+                             "atLeast80": sum(game["ownScore"] >= 80 for game in subset)}
     report = {"meta": meta, "model": str(model_path), "summary": summary, "games": games,
-              "seconds": time.monotonic() - started,
+              "seconds": time.monotonic() - started, "search": search_config,
               "limitations": ["local-practice-v1", "small-sample", "paired-games-not-independent",
                              "selection-evaluation-not-final-holdout",
                              "frozen-opponent-trained-on-previous-setup"]}
@@ -110,12 +118,14 @@ def main():
     parser.add_argument("--out", type=Path, default=ROOT / ".local/ai/evaluation.json")
     parser.add_argument("--catalog")
     parser.add_argument("--weights")
+    parser.add_argument("--search-config", type=Path, help="含search预算的JSON配置；不传则只用网络策略")
     args = parser.parse_args()
     if args.pairs < 1:
         parser.error("pairs >= 1")
     torch.set_num_threads(2)
+    search = json.loads(args.search_config.read_text(encoding="utf-8"))["search"] if args.search_config else None
     report = evaluate(args.model, args.out, args.pairs, args.opponents, args.imitation,
-                      args.prefix, args.catalog, args.weights, frozen_path=args.frozen)
+                      args.prefix, args.catalog, args.weights, frozen_path=args.frozen, search_config=search)
     print(json.dumps({"summary": report["summary"], "report": str(args.out)}), flush=True)
 
 

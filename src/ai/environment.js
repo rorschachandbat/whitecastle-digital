@@ -135,6 +135,7 @@ export class TrainingEnvironment {
       done: false, actor: this.actor, state, candidates, heuristic,
       request: this.probe?.request?.type ?? 'root',
       completedActions: this.match.actions.length,
+      decisions: this.decisions,
       choices: options.map(({ action, value, orderIndex }) => ({ action, value, orderIndex })),
       featureVersion: FEATURE_VERSION, actionModelVersion: ACTION_MODEL_VERSION,
     };

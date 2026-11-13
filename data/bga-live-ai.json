@@ -1,5 +1,6 @@
 {
-  "loopDirectory": ".local/ai/continuous-r7",
+  "loopDirectory": ".local/ai/continuous-r8",
+  "search": { "width": 4, "samples": 2, "maxDecisions": 64, "maxPlacements": 6 },
   "python": null,
-  "timeoutMilliseconds": 30000
+  "timeoutMilliseconds": 120000
 }

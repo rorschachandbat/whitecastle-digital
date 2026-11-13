@@ -643,7 +643,7 @@ function aiPanel() {
   else panel.append(el('p', text('play.ai.unavailable'), 'error'));
   if (aiSeat) {
     panel.append(el('p', text(opponentTurn() ? 'play.ai.turn' : 'play.ai.seated', { generation: generationLabel(session.ai?.generation), player: playerName(aiSeat) })));
-    panel.append(el('p', text('play.ai.method'), 'muted'));
+    panel.append(el('p', text(session.ai?.method === 'score-search' ? 'play.ai.method' : 'play.ai.policyMethod'), 'muted'));
     if (aiPaused) panel.append(el('p', text('play.ai.paused')));
     const actions = el('div', null, 'toolbar');
     if (opponentTurn()) actions.append(button(text('play.ai.resume'), async () => {

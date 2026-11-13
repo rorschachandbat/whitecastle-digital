@@ -23,6 +23,8 @@ class LoopTests(unittest.TestCase):
                             "guide": {"winRate": guide}}}
 
     def test_promotion_rejects_small_samples_and_regression(self):
+        # 旧胜负目标仍能读取历史评估；新得分目标由专门回归测试覆盖。
+        self.config.pop("selectionObjective", None)
         self.assertFalse(LOOP.promotion(self.report(games=4), self.baseline, self.config)["promoted"])
         self.assertFalse(LOOP.promotion(self.report(guide=0.2), self.baseline, self.config)["promoted"])
         self.assertFalse(LOOP.promotion(self.report(wins=0.5), self.baseline, self.config)["promoted"])

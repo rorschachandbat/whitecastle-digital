@@ -54,7 +54,7 @@ function view(id, session) {
     ai: {
       seat: session.aiSeat, paused: session.aiPaused, generation: session.aiGeneration,
       modelId: session.aiModel, legacySetup: Boolean(session.aiLegacySetup),
-      method: session.aiSeat ? 'policy-only' : null,
+      method: session.aiSeat ? session.aiMethod ?? 'policy-only' : null,
     },
   };
 }

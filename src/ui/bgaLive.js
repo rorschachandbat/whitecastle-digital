@@ -215,6 +215,9 @@ function renderAdvice(latest, connected) {
   const candidates = el('ol', undefined, 'candidates');
   for (const candidate of result.candidates.slice(0, result.scope === 'placement-root-only' ? 5 : undefined)) {
     const item = el('li');
+    if (candidate.searchScore !== null && Number.isFinite(candidate.searchScore)) {
+      item.append(el('p', text('live.searchScore', { score: candidate.searchScore.toFixed(1) }), 'muted'));
+    }
     if (result.scope === 'live-chain') {
       item.append(el('strong', chainText(candidate)), el('p', text('live.chainWeight', {
         weight: (candidate.policyWeight * 100).toFixed(1),
@@ -253,6 +256,9 @@ function renderAdvice(latest, connected) {
     candidates.append(item);
   }
   advice.append(candidates);
+  if (result.search?.searched) advice.append(el('p', text('live.searchSummary', {
+    candidates: result.search.candidates, nodes: result.search.nodes, placements: result.search.maxPlacementsAhead,
+  }), 'muted'));
   if (result.plan?.steps.length) {
     const steps = el('ol');
     result.plan.steps.forEach((step) => steps.append(el('li', chainText(step))));
@@ -261,7 +267,7 @@ function renderAdvice(latest, connected) {
   if (result.plan?.boundary === 'unknown-reveal') advice.append(el('p', text('live.chainReveal'), 'muted'));
   if (result.plan?.boundary === 'decision-limit') advice.append(el('p', text('live.chainLimit'), 'muted'));
   if (result.uncertainties?.includes('time-arrival-order')) advice.append(el('p', text('live.timeUncertainty'), 'muted'));
-  advice.append(el('p', text(result.scope === 'starting-draft-only'
+  advice.append(el('p', text(result.search?.searched ? 'live.searchNotice' : result.scope === 'starting-draft-only'
     ? 'live.adviceNotice' : 'live.placementNotice'), 'muted'));
 }
 async function refreshTraining() {
@@ -284,6 +290,15 @@ async function refreshTraining() {
       wins: value.guideEvaluation.wins, games: value.guideEvaluation.games,
       margin: value.guideEvaluation.averageMargin.toFixed(2),
     }), 'muted'));
+    if (Number.isFinite(value.guideEvaluation?.averageScore)) training.append(el('p', text('live.guideScore', {
+      score: value.guideEvaluation.averageScore.toFixed(2),
+    }), 'muted'));
+    if (value.scoreStats?.count) training.append(el('p', text('live.scoreStats', {
+      average: value.scoreStats.average.toFixed(2), maximum: value.scoreStats.max, count: value.scoreStats.count,
+      sixty: (100 * value.scoreStats.atLeast60 / value.scoreStats.count).toFixed(1),
+      eighty: (100 * value.scoreStats.atLeast80 / value.scoreStats.count).toFixed(1),
+    }), 'muted'));
+    if (value.objective === 'own-final-score') training.append(el('p', text('live.scoreObjective'), 'muted'));
     training.append(el('p', text('live.trainingScope'), 'muted'));
   } catch { training.append(el('p', text('live.trainingMissing'))); }
 }

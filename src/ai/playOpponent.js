@@ -26,15 +26,15 @@ export function policyChoice(policy, count) {
 }
 
 function acceptInference(result, count, generation) {
-  if (result?.source !== 'continuous-champion' || result.method !== 'policy-only'
+  if (result?.source !== 'continuous-champion' || !['policy-only', 'score-search'].includes(result.method)
     || !(result.model === 'initial' || /^generation-\d{5}$/.test(result.model ?? ''))) fail('AI_INVALID_POLICY');
   if (generation && result.model !== generation) fail('AI_CHAMPION_CHANGED');
-  return { index: policyChoice(result.policy, count), model: result.model };
+  return { index: policyChoice(result.policy, count), model: result.model, method: result.method };
 }
 
 /**
  * 只替指定席位走完当前连续决策，停在另一席或终局。
- * 网络只接收公开特征；试走结果不回传给模型，也不读取未来骰子。
+ * 网络只接收公开特征；搜索可用独立机会样本比较续行，不读取真实未来骰子。
  */
 export async function playOpponentSeat(environment, infer, {
   seat, maxDecisions = OPPONENT_DECISION_BATCH, generation,
@@ -45,6 +45,7 @@ export async function playOpponentSeat(environment, infer, {
   let model = generation ?? null;
   let decisions = 0;
   let bounded = false;
+  let method = 'policy-only';
   while (environment.match.phase !== 'finished' && environment.actor === seat) {
     if (decisions >= maxDecisions) {
       bounded = true;
@@ -60,6 +61,7 @@ export async function playOpponentSeat(environment, infer, {
     if (observation.done || observation.actor !== seat) break;
     const choice = acceptInference(await infer(observation), observation.candidates.length, model);
     model = choice.model;
+    if (choice.method === 'score-search') method = choice.method;
     const before = environment.match.actions.length;
     try {
       environment.step(choice.index);
@@ -72,7 +74,7 @@ export async function playOpponentSeat(environment, infer, {
     if (activeLocalPlayer(environment.match) !== seat) break;
   }
   return {
-    actions: played, decisions, bounded, model, method: 'policy-only',
+    actions: played, decisions, bounded, model, method,
     done: environment.match.phase === 'finished',
     actor: activeLocalPlayer(environment.match),
   };

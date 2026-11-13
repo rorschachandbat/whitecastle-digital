@@ -12,6 +12,8 @@ const one = (items, code = 'BGA_ADVICE_SETUP') => {
   return items[0];
 };
 const inside = (item, container) => item.containers.includes(container);
+const draftSessions = new WeakMap();
+export const getDraftSession = (prepared) => draftSessions.get(prepared);
 
 /** R-SETUP-04：只从公开选牌盘面生成主网络输入，不访问回放或网页内部状态。 */
 export function prepareLiveAdvice(latest, { catalog, mapping, weights }) {
@@ -90,8 +92,12 @@ export function prepareLiveAdvice(latest, { catalog, mapping, weights }) {
   }
   const env = new TrainingEnvironment(catalog, weights);
   const observation = env.initialize(match);
+  env.publicInitialBridges = ['coral', 'black', 'white'].map((color) => ({
+    id: color, color, dice: p.dice.filter((die) => die.color === color)
+      .sort((a, b) => a.value - b.value).map((die) => ({ id: die.instance, value: die.value })),
+  }));
   const actor = one(p.players.filter((player) => player.seat === observation.actor));
-  return { observation, actor: actor.platformId, scope: 'starting-draft-only',
+  const result = { observation, actor: actor.platformId, scope: 'starting-draft-only',
     draftContext: pairs.map(({ resource, action }) => ({
       resource: { instance: resource.instance, family: resource.family, definition: resource.definition, localId: resource.localId },
       action: { instance: action.instance, family: action.family, definition: action.definition, localId: action.localId },
@@ -108,6 +114,8 @@ export function prepareLiveAdvice(latest, { catalog, mapping, weights }) {
         lantern: [...resource.back, ...(resource.grantDecreeId
           ? one(catalog.cards.filter((card) => card.id === resource.grantDecreeId)).back : [])] };
     }) };
+  draftSessions.set(result, { env, uncertainPriority: false });
+  return result;
 }
 
 /** 只把本次公开摆设交给共用配置器，不补推未知牌面。 */

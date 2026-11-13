@@ -126,7 +126,9 @@ test('AI 存档分析从同一引擎恢复，拒绝其他配置的存档', () =>
   const save = exportLocalMatch(env.match);
   const expected = env.observe();
   const restored = environment();
-  assert.deepEqual(restored.restore(save), expected);
+  // 存档仅含已提交行动；恢复后本次分析的决策计数从零开始，其余公开观察相同。
+  assert.deepEqual(restored.restore(save), { ...expected, decisions: 0 });
+  assert.equal(expected.decisions, env.decisions);
   const changed = structuredClone(save);
   changed.catalog.cards[0].name = 'different-card-data';
   assert.throws(() => restored.restore(changed), /AI_REPLAY_CONFIG_MISMATCH/);

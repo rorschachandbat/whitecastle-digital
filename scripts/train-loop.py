@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import signal
 import time
@@ -76,6 +77,16 @@ def validate(config):
         raise ValueError("AI_LOOP_BAD_LIMIT")
     if not config["prefix"] or len(config["prefix"]) > 80:
         raise ValueError("AI_LOOP_BAD_PREFIX")
+    if config.get("selectionObjective") not in (None, "own-final-score"):
+        raise ValueError("AI_LOOP_BAD_OBJECTIVE")
+    improvement = config.get("minimumScoreImprovement", 0.25)
+    if not isinstance(improvement, (int, float)) or not math.isfinite(improvement) or improvement <= 0:
+        raise ValueError("AI_LOOP_BAD_SCORE_THRESHOLD")
+    if config.get("search"):
+        for key, maximum in (("width", 16), ("samples", 8), ("maxDecisions", 300), ("maxPlacements", 18)):
+            value = config["search"].get(key)
+            if type(value) is not int or not 1 <= value <= maximum:
+                raise ValueError("AI_BAD_SEARCH_CONFIG")
     return config
 
 
@@ -85,6 +96,18 @@ def promotion(candidate, baseline, config):
     guide = candidate["summary"]["guide"]
     previous = baseline["summary"]["guide"]
     reasons = []
+    if config.get("selectionObjective") == "own-final-score":
+        current = candidate["summary"]["guide"]
+        previous = baseline["summary"]["guide"]
+        if "averageScore" not in current or "averageScore" not in previous:
+            raise ValueError("AI_SCORE_REPORT_MISSING")
+        if current["games"] < 2 * config["minimumPromotionPairs"]:
+            reasons.append("insufficient-pairs")
+        if current["averageScore"] < previous["averageScore"] + config.get("minimumScoreImprovement", 0.25):
+            reasons.append("final-score-not-improved")
+        return {"promoted": not reasons, "reasons": reasons, "selectionOnly": True,
+                "averageScore": current["averageScore"], "championAverageScore": previous["averageScore"],
+                "winRate": current["winRate"], "objective": "own-final-score"}
     if duel["games"] < 2 * config["minimumPromotionPairs"]:
         reasons.append("insufficient-pairs")
     if duel["winRate"] < config["promotionWinRate"]:
@@ -108,7 +131,7 @@ def disk_bytes(folder):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--out-dir", type=Path, default=ROOT / ".local/ai/continuous-r7")
+    parser.add_argument("--out-dir", type=Path, default=ROOT / ".local/ai/continuous-r8")
     parser.add_argument("--generations", type=int, default=0, help="总目标代数；0 为持续运行")
     args = parser.parse_args()
     if args.generations < 0:
@@ -200,6 +223,9 @@ def main():
                 active = state["active"]
                 candidate_path = Path(active["checkpoint"])
                 model, checkpoint = load_checkpoint(candidate_path if candidate_path.exists() else active["base"], meta)
+                # 统计与模型同一检查点提交；恢复时不因状态文件晚写而漏记或重复记分。
+                if "scoreStats" in checkpoint:
+                    state["scoreStats"] = checkpoint["scoreStats"]
                 seen = set(checkpoint.get("seenGames", []))
                 if seen & set(state["evaluatedSeeds"]):
                     raise ValueError("AI_TRAIN_EVALUATION_SEED_OVERLAP")
@@ -215,8 +241,10 @@ def main():
                             return 0
                         TRAIN.reinforce(model, optimizer, rules, 1,
                                         f"{config['prefix']}-{state['run']}-g{generation}",
-                                        candidate_path, meta, seen, checkpoint, league, current / "experience")
+                                        candidate_path, meta, seen, checkpoint, league, current / "experience",
+                                        search_config=config.get("search"))
                         model, checkpoint = load_checkpoint(candidate_path, meta)
+                        state["scoreStats"] = checkpoint["scoreStats"]
                         optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
                         state["completedSelfplayGames"] = checkpoint["selfplayTotal"]
                         state["updatedAt"] = time.time()
@@ -241,11 +269,12 @@ def main():
                     EVAL.evaluate(candidate_path, candidate_report, config["evaluationPairs"],
                                   candidate_opponents, state["champion"], prefix,
                                   config.get("catalog"), config.get("weights"), stop=stop,
-                                  frozen_path=frozen_path)
+                                  frozen_path=frozen_path, search_config=config.get("search"))
                 if not baseline_report.exists():
                     EVAL.evaluate(state["champion"], baseline_report, config["evaluationPairs"],
                                   baseline_opponents, prefix=prefix, catalog=config.get("catalog"),
-                                  weights=config.get("weights"), stop=stop, frozen_path=frozen_path)
+                                  weights=config.get("weights"), stop=stop, frozen_path=frozen_path,
+                                  search_config=config.get("search"))
                 result = promotion(read(candidate_report), read(baseline_report), config)
                 state["latest"] = str(candidate_path)
                 if result["promoted"]:

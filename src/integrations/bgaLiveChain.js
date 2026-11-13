@@ -1,5 +1,5 @@
 import { canonicalCatalog } from '../data/catalog.js';
-import { getPlayingSession, preparePlayingAdvice, publicObservations } from './bgaLivePlaying.js';
+import { getPlayingSession, setPlayingSession, preparePlayingAdvice, publicObservations } from './bgaLivePlaying.js';
 
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 const signature = (value) => canonicalCatalog(value);
@@ -118,9 +118,11 @@ export function prepareChainAdvice(latest, parameters) {
   if (queue.length || matches.length !== 1) fail('BGA_ADVICE_CHAIN_CONTEXT');
   const env = matches[0];
   const observations = publicObservations(env, session.uncertainPriority);
-  return { observation: observations[0], observations, actor: prepared.actor, scope: 'live-chain',
+  const result = { observation: observations[0], observations, actor: prepared.actor, scope: 'live-chain',
     uncertainties: prepared.uncertainties,
     candidates: env.getLegalActions().map((option) => describeLiveChoice(env, option, p)) };
+  setPlayingSession(result, { env, uncertainPriority: session.uncertainPriority });
+  return result;
 }
 
 function matchesPublicState(env, p) {

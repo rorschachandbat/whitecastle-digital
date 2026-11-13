@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { TrainingEnvironment } from '../src/ai/environment.js';
 import { chooseHeuristic } from '../src/ai/heuristicPolicy.js';
 import { loadTrainingConfig } from './ai-common.mjs';
+import { SCORE_SCALE } from '../src/ai/objective.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values } = parseArgs({ options: {
@@ -43,7 +44,8 @@ for (let game = 0; game < games; game += 1) {
     }
     if (observation.placements !== 18 || !observation.score.complete) throw new Error('AI_INCOMPLETE_GAME');
     for (const row of rows) {
-      row.z = observation.score.winner === row.actor ? 1 : -1;
+      row.finalScore = observation.score.players[row.actor].total;
+      row.z = row.finalScore / SCORE_SCALE;
       if (!stream.write(`${JSON.stringify(row)}\n`)) await once(stream, 'drain');
       records += 1;
     }

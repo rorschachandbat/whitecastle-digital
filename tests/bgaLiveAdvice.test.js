@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { prepareLiveAdvice } from '../src/integrations/bgaLiveAdvice.js';
+import { prepareLiveAdvice, getDraftSession } from '../src/integrations/bgaLiveAdvice.js';
+import { searchRoutes, samplePublicEnvironment } from '../src/ai/routeSearch.js';
+import { chooseHeuristic } from '../src/ai/heuristicPolicy.js';
 import { mapBgaDefinition } from '../src/integrations/bgaReplay.js';
 import { loadTrainingConfig } from '../scripts/ai-common.mjs';
 import { createLiveAi } from '../scripts/bga-live-ai.mjs';
@@ -72,6 +74,26 @@ test('公开选牌使用主训练编码，三组配对及当前行动者准确�
   const modified = fixture();
   modified.archive.publicPosition.cards.find((card) => card.family === 'daimyo').definition = '3';
   assert.notDeepEqual(prepareLiveAdvice(modified, parameters).observation.state, result.observation.state);
+});
+
+test('选牌搜索沿用已公开首轮骰子，跨轮后恢复独立机会抽样', () => {
+  const latest = fixture();
+  latest.archive.publicPosition.dice.forEach((die, index) => { die.instance = `public-die-${index}`; });
+  const prepared = prepareLiveAdvice(latest, parameters);
+  const { env } = getDraftSession(prepared);
+  const branch = samplePublicEnvironment(env, 'draft-dice');
+  let observation = branch.observe();
+  while (branch.match.phase === 'draft') observation = branch.step(chooseHeuristic(observation.heuristic));
+  assert.deepEqual(branch.match.state.bridges.map((bridge) => bridge.dice.map((die) => die.value)),
+    [[1, 2, 3], [1, 2, 3], [1, 2, 3]]);
+  const original = structuredClone(env.match);
+  const result = searchRoutes(env, env.getLegalActions().map(() => 1 / env.getLegalActions().length), {
+    width: 2, samples: 1, maxDecisions: 160, maxPlacements: 8, seed: 'public-draft-route',
+  });
+  assert.equal(result.searched, true);
+  assert.equal(result.failed, 0);
+  assert.ok(result.maxRoundsAhead >= 2);
+  assert.deepEqual(env.match, original);
 });
 
 test('第二位选牌仅在公开资源和背面唯一对账后分析，缺少配对和未结算收益拒绝', () => {

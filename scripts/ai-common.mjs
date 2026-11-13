@@ -6,6 +6,7 @@ import { canonicalCatalog, validateCatalog } from '../src/data/catalog.js';
 import { FEATURE_VERSION } from '../src/ai/features.js';
 import { ACTION_MODEL_VERSION } from '../src/ai/environment.js';
 import { LOCAL_PROFILE_ID, LOCAL_SETUP_VERSION } from '../src/engine/localMatch.js';
+import { REWARD_VERSION } from '../src/ai/objective.js';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const digest = (value) => createHash('sha256').update(canonicalCatalog(value)).digest('hex');
@@ -24,7 +25,7 @@ export function loadTrainingConfig(catalogPath, weightsPath) {
   return {
     catalog, weights,
     meta: { profile: LOCAL_PROFILE_ID, featureVersion: FEATURE_VERSION, actionModelVersion: ACTION_MODEL_VERSION,
-      setupVersion: LOCAL_SETUP_VERSION,
+      setupVersion: LOCAL_SETUP_VERSION, rewardVersion: REWARD_VERSION,
       catalogHash: digest(catalog), heuristicHash: digest(weights),
       encoderHash: createHash('sha256').update(fs.readFileSync(path.join(projectRoot, 'src/ai/features.js')))
         .update(fs.readFileSync(path.join(projectRoot, 'src/ai/environment.js'))).digest('hex') },

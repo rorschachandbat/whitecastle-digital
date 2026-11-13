@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import { TrainingEnvironment } from '../src/ai/environment.js';
 import { exportLocalMatch } from '../src/engine/localMatch.js';
 import { loadTrainingConfig } from './ai-common.mjs';
+import { searchRoutes } from '../src/ai/routeSearch.js';
 
 const { values } = parseArgs({ options: { catalog: { type: 'string' }, weights: { type: 'string' } } });
 const { catalog, weights, meta } = loadTrainingConfig(values.catalog, values.weights);
@@ -19,6 +20,7 @@ for await (const line of readline.createInterface({ input: process.stdin, crlfDe
       for (const index of request.choices ?? []) result = environment.step(index);
     }
     else if (request.op === 'step' && environment.match) result = environment.step(request.index);
+    else if (request.op === 'search' && environment.match) result = searchRoutes(environment, request.policy, request.settings);
     else if (request.op === 'replay' && environment.match) result = exportLocalMatch(environment.match);
     else throw new Error('AI_INVALID_REQUEST');
     console.log(JSON.stringify({ ok: true, result }));

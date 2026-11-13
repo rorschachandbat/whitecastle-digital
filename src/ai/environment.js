@@ -3,6 +3,7 @@ import { canonicalCatalog } from '../data/catalog.js';
 import { placementOptions, probeLocalAction, chooseActionOption } from '../engine/actionOptions.js';
 import { encodeState, encodeOption, FEATURE_VERSION } from './features.js';
 import { heuristicScore } from './heuristicPolicy.js';
+import { publicScoreDiagnostics } from './highScore.js';
 
 export const ACTION_MODEL_VERSION = 'factored-engine-v1';
 
@@ -125,6 +126,7 @@ export class TrainingEnvironment {
       done: true, score: this.match.state.score, decisions: this.decisions,
       completedActions: this.match.actions.length,
       placements: this.match.actions.filter((action) => action.type === 'placeDie').length,
+      boundary: true, diagnostics: publicScoreDiagnostics(this.match),
     };
     const options = this.getLegalActions();
     const state = encodeState(this);
@@ -137,6 +139,7 @@ export class TrainingEnvironment {
       completedActions: this.match.actions.length,
       decisions: this.decisions,
       choices: options.map(({ action, value, orderIndex }) => ({ action, value, orderIndex })),
+      boundary: !this.pending, diagnostics: !this.pending ? publicScoreDiagnostics(this.match) : null,
       featureVersion: FEATURE_VERSION, actionModelVersion: ACTION_MODEL_VERSION,
     };
   }

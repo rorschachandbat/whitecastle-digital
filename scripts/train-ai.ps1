@@ -9,8 +9,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 if (!$Config) { $Config = Join-Path $taskRoot 'data/ai-training-loop.json' }
-if (!$OutputDirectory) { $OutputDirectory = Join-Path $taskRoot '.local/ai/continuous-r8' }
 $Config = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Config)
+if (!$OutputDirectory) {
+    $settings = Get-Content -LiteralPath $Config -Raw | ConvertFrom-Json
+    $configuredOutput = if ($settings.outputDirectory) { $settings.outputDirectory } else { '.local/ai/continuous-r9' }
+    $OutputDirectory = if ([System.IO.Path]::IsPathRooted($configuredOutput)) {
+        $configuredOutput
+    } else { Join-Path $taskRoot $configuredOutput }
+}
 $OutputDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 $taskPython = Join-Path $taskRoot '.local/ai-venv/Scripts/python.exe'
 $taskLoop = Join-Path $PSScriptRoot 'train-loop.py'

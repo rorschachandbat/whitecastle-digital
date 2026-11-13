@@ -1,8 +1,9 @@
 import { EFFECT_TYPES } from '../data/catalog.js';
 import { personalField } from '../engine/cardRules.js';
 import { expandLanternEffects, lanternBacks } from './lanternEffects.js';
+import { encodeHighScoreStructure } from './highScore.js';
 
-export const FEATURE_VERSION = 'public-decisions-v3';
+export const FEATURE_VERSION = 'public-decisions-v4';
 export const COLORS = ['coral', 'black', 'white'];
 export const ASSETS = ['food', 'iron', 'pearl', 'coin', 'seal', 'points'];
 export const ROWS = ['courtier', 'gardener', 'warrior'];
@@ -152,7 +153,8 @@ export function encodeState(env) {
     values.push(Number(Boolean(occupied)), Number(occupied?.actor === actor),
       Number(occupied?.actor === other));
   }
-  return values;
+  return env.legacyFeatureEncoding ? values : [...values,
+    ...encodeHighScoreStructure(player, match.config), ...encodeHighScoreStructure(opponent, match.config)];
 }
 
 /** 按候选语义评分，数据修改后无需为每张牌重新分配固定输出节点。 */

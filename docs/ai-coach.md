@@ -4,13 +4,13 @@
 
 从玩家昵称或链接到回放、已核对选牌决策与模型微调的入口见 [BGA训练工作流](bga-training-workflow.md)。目前真人数据只监督起始选牌策略，未接入完整放骰连锁或BGA对局价值标签。
 
-2026-11-13：r8 已接入自身终局分数目标及有限后续路线比较。使用 `guide-r8` 和 `continuous-r8`，r7 已停止，旧权重保留但不作为新训练起点。`rewardVersion=own-final-score-v1`、`featureVersion=public-decisions-v3` 与 `setupVersion=tile-inventory-v3` 共同绑定新数据与模型；旧胜负模型会显示不兼容。
+2026-11-13：r8已停止并保留；r9用家臣晋升、武士乘分与资源准备度作为可调先验，重新生成 `guide-r9`。正式输出为 `continuous-r9-full`；本机 `continuous-r9` 是已完成的两代小预算试验，配置不同，不能用正式配置续跑。`rewardVersion=own-final-score-v1`、`featureVersion=public-decisions-v4` 与 `setupVersion=tile-inventory-v3` 共同绑定数据及模型。教师最高50分，小预算模型训练席位最高38分；选模评估未晋级，详见 [r9实验](ai-r9-experiment.md)。侧栏配置仍保留旧冠军，这次没有自动部署新模型。
 
-奖励 `z=自身终局分数/80`，80只作归一化，不封顶，也不以胜负替代得分。线性价值头可以学习80分以上；60–80分是观察目标，当前没有达到该水平的证据。侧栏显示训练候选的平均分、最高分、样本数与≥60/80分比例，并单独展示冠军对攻略的平均分。
+奖励 `z=自身终局分数/80`，80只作归一化，不封顶，也不以胜负替代得分。线性价值头可以学习80分以上；七分项辅助头学习即时分、钱印、资源、家臣、武士、园丁、时间，不改变实际奖励。教师样本的模仿权重为 `1 + min(1.5, max(0, finalScore - 30)/40)`，保留普通局。60–80分是观察目标，当前没有达到该水平的证据。日志查看器显示训练候选均分、最高分、分项及≥60/80/100比例。
 
-训练及评估每步先由策略网络和攻略交错提名3个候选，每候选1个共同机会样本，最多推进40个原子决策和4次放骰；实时侧栏及练习对手默认4候选、2样本、64决策和6次放骰。续行采用攻略策略（小概率探索次优），含对手回应、轮末与后续放骰。当前已公开骰子保持，未知补牌与未来骰子使用独立样本；未知时间轨到达顺序也抽样比较。每候选走到终局则用真实终局分，否则以已提交状态的引擎阶段计分比较，未完成连锁尚未兑现的收益不计。它不是完整MCTS，没有使用价值头作叶节点估值，不能保证最优。实时服务在工作线程搜索，续行超时保留根建议并标出截断。
+正式训练与评估仅在完整动作根节点搜索，网络与攻略交错提名4个候选，每候选2个共同机会样本，预算120次原子决策/8次放骰。达到预算时先完成当前连锁；最多额外推进160次选择，仍未完成则记录失败，不伪造零分。截断估值为引擎阶段分加公开的家臣/武士交叉贡献与资源准备潜力；终局潜力严格归零。续行仍由攻略主导（小概率探索次优），没有使用网络价值头估叶。当前已公开骰子保持，未知补牌、未来骰子及缺失的时间先后关系独立抽样。它不是完整MCTS，不能保证最优；小预算试验使用2×1、40/4。`data/ai-search-deep.json` 提供8×4、300/18研究预算，尚未实际验证，不建议直接长期运行。
 
-r8 每代与攻略和同编码的当前冠军交换座位评估；双方神经网络使用相同搜索预算。旧固定对手与当前编码、奖励契约不兼容，因此 `frozenOpponent` 设为 `null`。后续若增加固定对手，须使用同编码及匹配目录、启发式指纹的检查点；这些评估仅用于选模，不是最终保留测试集。
+r9每代与攻略和同编码的当前冠军交换座位评估；双方神经网络使用相同搜索预算。旧固定对手与当前编码、奖励契约不兼容，因此 `frozenOpponent` 设为 `null`。后续若增加固定对手，须使用同编码及匹配目录、启发式指纹的检查点；这些评估仅用于选模，不是最终保留测试集。
 
 按用户确认，继续以当前 `local-practice-v1` 为训练目标，不在这批改动中扩展正式摆设规则。卡牌数值仍由 JSON 配置管理；数据变化必须创建新的训练目录。训练变强和训练时间增长是两回事，本项目不承诺仅靠连续运行就达到强棋力。
 
@@ -31,15 +31,15 @@ r8 每代与攻略和同编码的当前冠军交换座位评估；双方神经�
 
 ## 如何一直运行
 
-双击仓库根目录的 `查看AI训练日志.cmd`，即可打开每2秒刷新的独立查看窗口，显示累计平均/最高分、60/80分比例、最近10条训练记录及错误日志。关闭窗口或按 Ctrl+C 只退出查看；每局结束后分数才更新，无需重启训练或构建。
+双击仓库根目录的 `查看AI训练日志.cmd`，即可打开每2秒刷新的独立查看窗口，显示累计平均/最高分、60/80/100分比例、七分项、最近10条训练记录、搜索耗时/失败及价值/分项MSE。关闭窗口或按 Ctrl+C 只退出查看；每局结束后分数才更新，无需重启训练或构建。
 
-命令行也可运行 `node scripts/watch-ai.mjs --once` 查看一次，或加 `--raw` 查看原始JSON日志。默认目录读取当前副本 `data/bga-live-ai.json`；可用 `--directory`、`--log`、`--error-log` 覆盖文件位置，`--interval` 设置1–60秒刷新间隔。启动器与 `scripts/watch-ai.mjs`、`src/ui/StringTable.js`、`data/bga-live-ai.json` 必须按仓库布局一起复制，另需Node环境和该副本本机训练输出；不依赖盘符、分支名或构建目录。
+命令行也可运行 `node scripts/watch-ai.mjs --once` 查看一次，或加 `--raw` 查看原始JSON日志。默认目录优先读取当前副本 `data/ai-training-loop.json` 的 `outputDirectory`，旧分支缺少该项时回退侧栏配置；可用 `--directory`、`--log`、`--error-log` 覆盖文件位置，`--interval` 设置1–60秒刷新间隔。启动器与 `scripts/watch-ai.mjs`、`src/ui/StringTable.js`、训练及侧栏配置须按仓库布局一起复制，另需Node和该副本本机训练输出；不依赖盘符、分支名或构建目录。
 
 从仓库根目录运行；需要已有 `.local/ai-venv`、Node及配套脚本，无须构建：
 
 ```powershell
 # 新版编码的数据必须重新生成；命令拒绝覆盖已有输出。
-node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r8.jsonl.gz --prefix ai-guide-r8
+node scripts/generate-training-data.mjs --games 32 --weights data/ai-heuristic-r9.json --out .local/ai/guide-r9.jsonl.gz --prefix r9-formal
 
 # 默认持续运行；不需要联网，也不需要打开网页。
 .\scripts\train-ai.ps1
@@ -59,13 +59,15 @@ node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r8.jso
 
 `-Generations 0` 是持续模式；计算机休眠、关机时没有计算，重新执行命令才恢复。没有安装开机任务、系统服务或云计算作业。前台可用 Ctrl+C 请求停止；强制结束最多丢失正在执行但尚未写检查点的一局。预热中断会从头预热；选模评估中断会重做该份未完成报告。
 
-同一输出目录由系统文件锁保护，防止两个进程同时写模型。输出默认 `.local/ai/continuous-r8/`：
+同一输出目录由系统文件锁保护，防止两个进程同时写模型。输出由配置的 `outputDirectory` 指定，当前默认 `.local/ai/continuous-r9-full/`：
 
 | 文件 | 用途 |
 |---|---|
 | `loop-state.json` | 当前代、阶段、最近检查点、冠军、历史对手、已用评估种子 |
 | `initial/imitation.pt` | 首次预热快照 |
 | `generation-*/candidate.pt` | 候选、优化器和完整对局恢复状态 |
+| `generation-*/candidate.pt.decisions.jsonl` | 双方逐步选择、前三候选、策略/采样熵、搜索结果和动作边界诊断 |
+| `generation-*/candidate.pt.progress.json` | 该代每局损失、分项、梯度和搜索统计；恢复时累积并按种子去重 |
 | `generation-*/experience/` | 每局压缩经验及完整性清单 |
 | `generation-*/evaluation.json` | 候选对冠军与攻略的选模报告 |
 | `generation-*/champion-evaluation.json` | 相同开局下冠军对攻略的基线 |
@@ -74,9 +76,9 @@ node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r8.jso
 
 配置的 `threads` 默认为2，当前PyTorch为CPU版。`maxDiskGB` 默认4，输出目录达到上限后在对局边界停止；这是软上限，单局写入和预热可能超过一点。脚本不自动删除旧模型。数据输入文件不在输出目录内，其空间不计入这个限制。可调整游戏数、评估数、阈值、线程和存储预算；为避免在中断恢复时改变实验含义，改配置后使用新的 `-OutputDirectory`。
 
-`input`、`catalog`、`weights`、`initialCheckpoint` 的相对路径以仓库为基准，配置本身和 `-OutputDirectory` 由调用方指定。换分支需一起复制 `scripts/`、`src/ai/`、`src/engine/`、`src/data/`、`data/` 及依赖，另安装Python环境；无需固定盘符、分支名、远端URL或 `dist/`。
+`input`、`catalog`、`weights`、`initialCheckpoint`、配置内 `outputDirectory` 的相对路径以仓库为基准，配置文件和命令行 `-OutputDirectory` 由调用方指定。换分支需一起复制 `scripts/`、`src/`、`data/` 及依赖，另安装Python环境并提供本机教师数据；无需固定盘符、分支名、远端URL或 `dist/`。
 
-卡牌、编码、启发式版本或输入清单改变时，原目录拒绝继续。`encoderHash` 绑定特征和环境源码，避免漏改版本名后误载旧权重。2026-11-11用户授权删除旧实验，但自动审批阻止删除，实际将旧目录整体移到 `.local/obsolete-ai-pre-r4/`；修订4使用 `guide-r4` 数据和 `continuous-r4` 输出，从随机初始权重重新训练。旧文档中的v1/v2实验路径仅供历史追踪。
+卡牌、编码、启发式版本或输入清单改变时，原目录拒绝继续。`encoderHash` 绑定特征、环境、高分估值和攻略源码，避免漏改版本名后误载旧权重。修改这些文件后须重新生成教师数据并另建实验目录。旧文档中的v1/v2/r4/r8路径只供历史追踪。
 
 ## 数据为什么会更有用
 
@@ -90,9 +92,9 @@ node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r8.jso
 
 ## 本批补全的编码
 
-`public-decisions-v2` 继续相对当前行动者编码，并保留语义动作特征：
+`public-decisions-v4` 继续相对当前行动者编码，并保留语义动作特征：
 
-- 当前状态2345维、候选160维；维度与编码源码指纹同时绑定。
+- 当前状态2357维、候选160维；旧2345维之后追加双方各6个公开结构特征：城内家臣、武士价值及乘积、城门家臣、晋升/谒见资源准备度。
 - 双方每个家臣的具体层、房间及顶层槽位，避免同层人数相同却行动价值不同的局面混淆。
 - 放置区比较值、占用骰点和颜色，水井数量；双方时间优先关系及终局顺序。
 - 每排当前已揭示的个人面板收益、轮末仍待触发的花园。
@@ -107,7 +109,7 @@ node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r8.jso
 已经有命令行入口读取**本项目网页导出的存档**，重放到当前局面，输出前几个策略候选及各自的条件续行：
 
 ```powershell
-.\.local\ai-venv\Scripts\python.exe scripts/analyze-position.py .local/my-save.json --model .local/ai/continuous-r4/initial/imitation.pt --top 5 --out .local/ai/my-analysis.json
+.\.local\ai-venv\Scripts\python.exe scripts/analyze-position.py .local/my-save.json --weights data/ai-heuristic-r9.json --model .local/ai/continuous-r9-full/initial/imitation.pt --top 5 --out .local/ai/my-analysis.json
 ```
 
 实际使用时从 `loop-state.json` 读取 `champion` 的路径，替换示例模型。输出 `policyWeight` 是合法候选间的策略权重，`rawValue` 是未经校准的价值头数值；两者都**不是动作胜率**。排序对应当前原子动作，完整续行由该候选条件下的网络贪心选择产生，尚未遍历所有连锁组合，也没有网页高亮。
@@ -116,7 +118,7 @@ node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r8.jso
 
 ## 本地人机对打
 
-`npm run play` 打开的练习页可以在确认后把玩家1或玩家2交给当前冠军。模型只看公开特征，逐项选择合法动作，完整动作仍由原规则引擎和 boardgame.io Client 提交。撤销会暂停AI。现已使用上面的有限路线搜索；不能把策略或搜索权重说成胜率，也不能用存档种子预测未来骰子。详见 [本地试玩](local-play.md)。
+`npm run play` 打开的练习页可以在确认后把玩家1或玩家2交给兼容冠军。模型只看公开特征，逐项选择合法动作，完整动作仍由原规则引擎和 boardgame.io Client 提交。撤销会暂停AI。实时预算仍是4×2、64/6，本次r9训练尚未部署到该入口，旧模型重新加载时须通过兼容性检查。不能把策略或搜索权重说成胜率，也不能用存档种子预测未来骰子。详见 [本地试玩](local-play.md)。
 
 ## 怎样做成围棋分析那样
 

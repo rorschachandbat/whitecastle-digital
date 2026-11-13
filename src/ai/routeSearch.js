@@ -2,10 +2,10 @@ import { randomBytes } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
 import { TrainingEnvironment } from './environment.js';
 import { probeLocalAction } from '../engine/actionOptions.js';
-import { score } from '../engine/engine.js';
 import { canonicalCatalog } from '../data/catalog.js';
+import { evaluateHighScore, EVALUATOR_VERSION } from './highScore.js';
 
-export const SEARCH_VERSION = 'public-score-rollout-v1';
+export const SEARCH_VERSION = 'public-high-score-rollout-v2';
 export const TRAIN_SEARCH = Object.freeze({ width: 3, samples: 1, maxDecisions: 40, maxPlacements: 4 });
 export const LIVE_SEARCH = Object.freeze({ width: 4, samples: 2, maxDecisions: 64, maxPlacements: 6 });
 const keyOf = ({ action, value, orderIndex }) => canonicalCatalog({ action, value, orderIndex });
@@ -14,7 +14,8 @@ const keyOf = ({ action, value, orderIndex }) => canonicalCatalog({ action, valu
 export function searchRoutesAsync(env, policy, settings) {
   const source = { match: env.match, pending: env.pending, probe: env.probe, orderPrefix: env.orderPrefix,
     options: env.getLegalActions().map(({ action, value, orderIndex, prefix }) => ({ action, value, orderIndex, prefix })),
-    weights: env.weights, lanternExpansion: env.lanternExpansion, publicInitialBridges: env.publicInitialBridges };
+    weights: env.weights, lanternExpansion: env.lanternExpansion, legacyFeatureEncoding: env.legacyFeatureEncoding,
+    publicInitialBridges: env.publicInitialBridges };
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./routeSearchWorker.js', import.meta.url), {
       workerData: { source, policy, settings }, execArgv: [],
@@ -86,6 +87,7 @@ export function samplePublicEnvironment(source, seed, priorityOrder) {
   branch.decisions = 0;
   branch.options = null;
   branch.lanternExpansion = source.lanternExpansion;
+  branch.legacyFeatureEncoding = source.legacyFeatureEncoding;
   branch.searchInitialBridges = Boolean(source.publicInitialBridges && !match.state);
   return branch;
 }
@@ -99,11 +101,6 @@ function advance(branch, index) {
     branch.searchInitialBridges = false;
   }
   return observation;
-}
-
-function committedScore(env, actor) {
-  if (!env.match.state) return 0;
-  return score(env.match.state, env.match.config).players[actor].total;
 }
 
 /** 比较多条后续路线；对手追求其自身得分，截断处为阶段计分，不能当作终局承诺。 */
@@ -134,6 +131,11 @@ export function searchRoutes(env, policy, settings = {}) {
   let failed = 0;
   let maxRoundsAhead = 0;
   let maxPlacementsAhead = 0;
+  let unfinished = 0;
+  let potentialTotal = 0;
+  let completedSamples = 0;
+  let extendedDecisions = 0;
+  const started = Date.now();
   const rootRound = env.match.state?.round ?? 0;
   const actor = env.actor;
   const priorities = Object.values(env.match.state?.players ?? {}).map((player) => player.timePriority);
@@ -155,9 +157,11 @@ export function searchRoutes(env, policy, settings = {}) {
         let placements = 0;
         let current = advance(branch, first);
         nodes += 1;
-        for (let step = 1; !current.done && step < config.maxDecisions; step += 1) {
+        // 预算只在完整动作边界截断；不能拿尚未提交的长连锁当成零收益。
+        for (let step = 1; !current.done && step < config.maxDecisions + 160; step += 1) {
           placements = branch.match.actions.slice(initialActions).filter((action) => action.type === 'placeDie').length;
-          if (!branch.pending && placements >= config.maxPlacements) break;
+          if (!branch.pending && (placements >= config.maxPlacements || step >= config.maxDecisions)) break;
+          if (step >= config.maxDecisions) extendedDecisions += 1;
           const ranking = current.heuristic.map((_, i) => i).sort((a, b) => current.heuristic[b] - current.heuristic[a]);
           // 小概率探索次优续行；不是提前知道对手下一手。
           const next = random() < 0.12 && ranking.length > 1 ? ranking[1] : ranking[0];
@@ -167,9 +171,13 @@ export function searchRoutes(env, policy, settings = {}) {
         placements = branch.match.actions.slice(initialActions).filter((action) => action.type === 'placeDie').length;
         maxPlacementsAhead = Math.max(maxPlacementsAhead, placements);
         maxRoundsAhead = Math.max(maxRoundsAhead, (branch.match.state?.round ?? 0) - rootRound);
+        if (branch.pending) { unfinished += 1; failed += 1; continue; }
         if (current.done) terminal += 1;
         else cutoff += 1;
-        samples[candidate].push(committedScore(branch, actor));
+        const evaluation = evaluateHighScore(branch.match, actor, branch.weights);
+        potentialTotal += evaluation.potential;
+        completedSamples += 1;
+        samples[candidate].push(evaluation.total);
       } catch (error) {
         // 部分机会样本可能在练习规则中无法完成；明确记录，不赋予虚假零分。
         if (!String(error.code ?? error.message).match(/^(AI_|INVALID_|TARGET_|DATA_|INSUFFICIENT_|NOT_|CHOICE_)/)) throw error;
@@ -182,12 +190,15 @@ export function searchRoutes(env, policy, settings = {}) {
     if (samples[i].length) scores[index] = samples[i].reduce((a, b) => a + b, 0) / samples[i].length;
   });
   const measured = scores.filter((value) => value !== null);
-  if (measured.length < 2) return { policy, scores, searched: false, nodes, failed, version: SEARCH_VERSION };
+  const diagnostics = { evaluator: EVALUATOR_VERSION, seconds: config.logTiming ? (Date.now() - started) / 1000 : 0,
+    unfinished, extendedDecisions, averagePotential: completedSamples ? potentialTotal / completedSamples : 0 };
+  if (measured.length < 2) return { policy, scores, searched: false, nodes, failed, terminal, cutoff,
+    ...diagnostics, version: SEARCH_VERSION };
   const peak = Math.max(...measured);
   const exponent = scores.map((value, i) => value === null ? 0
     : Math.exp((value - peak) / 2) * (0.9 + 0.1 * policy[i]));
   const total = exponent.reduce((a, b) => a + b, 0);
   return { policy: exponent.map((p) => p / total), scores, searched: true, nodes, terminal, cutoff, failed,
     candidates: measured.length, samples: config.samples, maxRoundsAhead, maxPlacementsAhead,
-    prioritySamples: unresolvedPriority ? Math.min(2, config.samples) : 0, version: SEARCH_VERSION };
+    prioritySamples: unresolvedPriority ? Math.min(2, config.samples) : 0, ...diagnostics, version: SEARCH_VERSION };
 }

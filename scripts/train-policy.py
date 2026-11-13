@@ -14,7 +14,26 @@ from torch import nn
 from torch.distributions import Categorical
 
 from ai_model import (ROOT, META_KEYS, PolicyValue, RulesProcess, batch_tensors,
-                      infer, save_checkpoint, load_checkpoint, REWARD_VERSION, SCORE_SCALE)
+                      infer, save_checkpoint, load_checkpoint, REWARD_VERSION, SCORE_SCALE, SCORE_PARTS)
+
+
+def parts_targets(rows):
+    """辅助标签必须是同一席位的实际终局分项，且总和与终局总分相符。"""
+    for row in rows:
+        parts = row.get("finalParts", {})
+        if (set(parts) != set(SCORE_PARTS)
+                or not all(isinstance(parts[key], (int, float)) and math.isfinite(parts[key])
+                           and parts[key] >= 0 for key in SCORE_PARTS)
+                or abs(sum(parts.values()) - row["finalScore"]) > 1e-6):
+            raise ValueError("AI_BAD_PARTS_TARGET")
+    return torch.tensor([[row["finalParts"][key] / SCORE_SCALE for key in SCORE_PARTS] for row in rows])
+
+
+def auxiliary_loss(model, rows):
+    if not model.score_parts:
+        return torch.tensor(0.0)
+    state = torch.tensor([row["state"] for row in rows], dtype=torch.float32)
+    return nn.functional.mse_loss(model.predict_parts(state), parts_targets(rows))
 
 
 def load_dataset(path, allow_partial=False):
@@ -55,6 +74,11 @@ def load_dataset(path, allow_partial=False):
                         if meta.get("rewardVersion") == REWARD_VERSION else row["z"] in (-1, 1))
         if not 0 <= row["teacher"] < len(row["candidates"]) or not valid_target:
             raise ValueError("AI_BAD_TARGET")
+        importance = row.get("policyWeight", 1.0)
+        if not isinstance(importance, (int, float)) or not math.isfinite(importance) or not 0 < importance <= 3:
+            raise ValueError("AI_BAD_POLICY_WEIGHT")
+        if "finalParts" in row:
+            parts_targets([row])
         if partial and (row.get("valueWeight") != 0
                         or row.get("provenance", {}).get("kind") != "bga-verified-draft-v1"
                         or row["provenance"].get("legalityVerified") is not True
@@ -81,7 +105,7 @@ def split_games(rows, rng):
 @torch.no_grad()
 def metrics(model, rows):
     model.eval()
-    policy_loss = value_loss = correct = decisions = 0
+    policy_loss = value_loss = correct = decisions = parts_loss = 0
     for offset in range(0, len(rows), 64):
         batch = rows[offset:offset + 64]
         logits, values = model(*batch_tensors(batch))
@@ -89,11 +113,14 @@ def metrics(model, rows):
         targets = torch.tensor([row["z"] for row in batch], dtype=torch.float32)
         policy_loss += nn.functional.cross_entropy(logits, labels, reduction="sum").item()
         value_loss += nn.functional.mse_loss(values, targets, reduction="sum").item()
+        if model.score_parts:
+            parts_loss += auxiliary_loss(model, batch).item() * len(batch)
         multiple = torch.tensor([len(row["candidates"]) > 1 for row in batch])
         correct += ((logits.argmax(-1) == labels) & multiple).sum().item()
         decisions += multiple.sum().item()
     return {"policyLoss": policy_loss / len(rows), "valueMSE": value_loss / len(rows),
-            "teacherTop1Nontrivial": correct / max(1, decisions), "nontrivialDecisions": decisions}
+            "teacherTop1Nontrivial": correct / max(1, decisions), "nontrivialDecisions": decisions,
+            "partsMSE": parts_loss / len(rows) if model.score_parts else None}
 
 
 def distill(model, optimizer, train, validation, epochs, rng):
@@ -109,7 +136,10 @@ def distill(model, optimizer, train, validation, epochs, rng):
             logits, values = model(*batch_tensors(batch))
             labels = torch.tensor([row["teacher"] for row in batch])
             targets = torch.tensor([row["z"] for row in batch], dtype=torch.float32)
-            loss = nn.functional.cross_entropy(logits, labels) + 0.25 * nn.functional.mse_loss(values, targets)
+            # 高分样本略提高模仿权重，始终保留普通局；不是把一条高分路线当成唯一最优解。
+            importance = torch.tensor([row.get("policyWeight", 1.0) for row in batch], dtype=torch.float32)
+            policy_loss = (nn.functional.cross_entropy(logits, labels, reduction="none") * importance).mean()
+            loss = policy_loss + 0.25 * nn.functional.mse_loss(values, targets) + auxiliary_loss(model, batch)
             optimizer.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1)
@@ -133,6 +163,9 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
     previous = (resume or {}).get("selfplayTotal", 0)
     score_stats = copy.deepcopy((resume or {}).get("scoreStats", {
         "count": 0, "total": 0, "max": 0, "atLeast60": 0, "atLeast80": 0}))
+    if model.score_parts:
+        score_stats.setdefault("partTotals", {key: 0 for key in SCORE_PARTS})
+        score_stats.setdefault("atLeast100", 0)
     if resume and resume.get("opponentState"):
         opponent.load_state_dict(resume["opponentState"])
     if resume and resume.get("optimizer"):
@@ -152,6 +185,23 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
         records = []
         search_targets = []
         search_nodes = 0
+        search_stats = {"calls": 0, "terminal": 0, "cutoff": 0, "failed": 0, "unfinished": 0,
+                        "seconds": 0.0, "maxSeconds": 0.0}
+        game_started = time.monotonic()
+        diagnostics_log = Path(str(output) + ".decisions.jsonl")
+        def log_event(event):
+            if not experience_dir:
+                return
+            with diagnostics_log.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"game": seed, "step": observation.get("decisions", len(records)),
+                                         "at": time.time(), **event}, ensure_ascii=False) + "\n")
+        def top_choices(probabilities):
+            choices = observation.get("choices", [None] * len(probabilities))
+            return [{"index": index, "choice": choices[index], "probability": float(probabilities[index]),
+                     "heuristic": observation["heuristic"][index]}
+                    for index in sorted(range(len(probabilities)), key=lambda i: float(probabilities[i]),
+                                        reverse=True)[:3]]
+        log_event({"event": "game-start", "opponentMode": mode})
         while not observation["done"]:
             actor = observation["actor"]
             league_seat = str(((previous + game) // 4 + int(mode == 3)) % 2)
@@ -163,8 +213,20 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
                 base = logits.softmax(-1)
                 search = None
                 if search_config and len(base) > 1:
-                    search = rules.request(op="search", policy=base.detach().tolist(), settings=search_config)
+                    # 常规训练先在放骰及轮末根节点搜索；子选择由策略学习，深搜配置可另设 decisionScope=all。
+                    use_search = search_config.get("decisionScope", "all") == "all" or observation.get("boundary", False)
+                    if use_search:
+                        log_event({"event": "search-start", "actor": actor, "request": observation["request"],
+                                   "diagnostics": observation.get("diagnostics")})
+                        search = rules.request(op="search", policy=base.detach().tolist(),
+                                               settings={**search_config, "seed": f"{seed}:{observation.get('decisions', len(trajectory))}"})
+                if search:
                     search_nodes += search["nodes"]
+                    search_stats["calls"] += 1
+                    for key in ("terminal", "cutoff", "failed", "unfinished"):
+                        search_stats[key] += search.get(key, 0)
+                    search_stats["seconds"] += search.get("seconds", 0)
+                    search_stats["maxSeconds"] = max(search_stats["maxSeconds"], search.get("seconds", 0))
                 if search and search["searched"]:
                     target = torch.tensor(search["policy"], dtype=base.dtype)
                     # 搜索分布与网络混合作为实际采样策略；对该分布求对数，避免离策略更新。
@@ -173,19 +235,47 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
                 else:
                     distribution = Categorical(logits=logits)
                 action = distribution.sample()
-                trajectory.append((actor, distribution.log_prob(action), value, distribution.entropy()))
+                trajectory.append((actor, distribution.log_prob(action), value, distribution.entropy(),
+                                   observation["state"]))
                 index = action.item()
+                log_event({"event": "decision", "actor": actor, "request": observation["request"],
+                           "learner": True, "choiceIndex": index, "candidateCount": len(base),
+                           "boundary": observation.get("boundary", False),
+                           "choice": observation.get("choices", [None] * len(base))[index],
+                           "valueScore": value.item() * SCORE_SCALE,
+                           "policyProbability": base[index].item(),
+                           "samplingProbability": distribution.probs[index].item(),
+                           "policyEntropy": Categorical(probs=base.detach()).entropy().item(),
+                           "samplingEntropy": distribution.entropy().item(),
+                           "topChoices": top_choices(base.detach()),
+                           "search": search, "diagnostics": observation.get("diagnostics")})
             else:
                 if mode == 1:
                     index = max(range(len(observation["heuristic"])), key=observation["heuristic"].__getitem__)
+                    probabilities = [float(i == index) for i in range(len(observation["candidates"]))]
+                    rival_value = None
+                    rival_entropy = 0.0
                 else:
                     with torch.no_grad():
-                        logits, _ = infer(rival, observation)
-                        index = Categorical(logits=logits).sample().item()
+                        logits, rival_value = infer(rival, observation)
+                        distribution = Categorical(logits=logits)
+                        index = distribution.sample().item()
+                        probabilities = distribution.probs.tolist()
+                        rival_value = rival_value.item() * SCORE_SCALE
+                        rival_entropy = distribution.entropy().item()
+                log_event({"event": "decision", "actor": actor, "request": observation["request"],
+                           "learner": False, "choiceIndex": index, "candidateCount": len(probabilities),
+                           "boundary": observation.get("boundary", False),
+                           "choice": observation.get("choices", [None] * len(probabilities))[index],
+                           "valueScore": rival_value, "policyProbability": probabilities[index],
+                           "samplingProbability": probabilities[index], "policyEntropy": rival_entropy,
+                           "samplingEntropy": rival_entropy, "topChoices": top_choices(probabilities),
+                           "search": None, "diagnostics": observation.get("diagnostics")})
             if experience_dir:
                 records.append({**meta, "game": seed, "step": len(records), "actor": actor,
                                 "state": observation["state"], "candidates": observation["candidates"],
-                                "action": index, "learner": learner, "request": observation["request"]})
+                                "action": index, "learner": learner, "request": observation["request"],
+                                "diagnostics": observation.get("diagnostics")})
             observation = rules.request(op="step", index=index)
         if observation["placements"] != 18 or not observation["score"]["complete"]:
             raise RuntimeError("AI_INCOMPLETE_ROLLOUT")
@@ -198,15 +288,25 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
                                 for item in trajectory])
         advantages = targets - values.detach()
         loss = -(log_probs * advantages).mean() + 0.5 * nn.functional.mse_loss(values, targets) - 0.01 * entropy
+        part_loss = torch.tensor(0.0)
+        if model.score_parts:
+            part_rows = [{"state": item[4], "finalScore": observation["score"]["players"][item[0]]["total"],
+                          "finalParts": observation["score"]["players"][item[0]]["parts"]} for item in trajectory]
+            part_loss = auxiliary_loss(model, part_rows)
+            loss = loss + part_loss
         if search_targets:
             loss = loss + 0.25 * torch.stack(search_targets).mean()
         optimizer.zero_grad()
         loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), 1)
+        gradient_norm = nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
-        result = {"game": game + 1, "seed": seed, "loss": loss.item(), "entropy": entropy.item(),
+        result = {"game": previous + game + 1, "seed": seed, "loss": loss.item(), "entropy": entropy.item(),
                   "decisions": observation["decisions"], "score": observation["score"],
                   "searchNodes": search_nodes,
+                  "search": search_stats, "seconds": time.monotonic() - game_started,
+                  "partsMSE": part_loss.item(), "valueMSE": nn.functional.mse_loss(values, targets).item(),
+                  "advantageMean": advantages.mean().item(), "advantageStd": advantages.std(unbiased=False).item(),
+                  "gradientNorm": float(gradient_norm), "diagnostics": observation.get("diagnostics"),
                   "learnerSeats": sorted({item[0] for item in trajectory}),
                   "opponent": "self" if mode == 0 else "guide" if mode == 1 else "history" if league else "legacy"}
         history.append(result)
@@ -217,7 +317,13 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
             score_stats["max"] = max(score_stats["max"], final_score)
             score_stats["atLeast60"] += int(final_score >= 60)
             score_stats["atLeast80"] += int(final_score >= 80)
+            if model.score_parts:
+                score_stats["atLeast100"] += int(final_score >= 100)
+                for key in SCORE_PARTS:
+                    score_stats["partTotals"][key] += result["score"]["players"][seat]["parts"][key]
         score_stats["average"] = score_stats["total"] / score_stats["count"]
+        if model.score_parts:
+            score_stats["averageParts"] = {key: value / score_stats["count"] for key, value in score_stats["partTotals"].items()}
         if experience_dir:
             # 完整终局按种子写独立分片；当前优化器不重复采样旧经验。
             folder = Path(experience_dir)
@@ -227,6 +333,8 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
             with gzip.open(temporary, "wt", encoding="utf-8") as handle:
                 for row in records:
                     row["finalScore"] = observation["score"]["players"][row["actor"]]["total"]
+                    if "parts" in observation["score"]["players"][row["actor"]]:
+                        row["finalParts"] = observation["score"]["players"][row["actor"]]["parts"]
                     row["z"] = row["finalScore"] / SCORE_SCALE
                     handle.write(json.dumps(row) + "\n")
             temporary.replace(shard)
@@ -238,9 +346,20 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
         save_checkpoint(output, model, meta, phase="selfplay", selfplayTotal=previous + game + 1,
                         seenGames=sorted(seen_games), optimizer=optimizer.state_dict(),
                         torchRng=torch.get_rng_state(), opponentState=opponent.state_dict(), scoreStats=score_stats)
-        Path(str(output) + ".progress.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
-        print(json.dumps({"phase": "selfplay", "game": game + 1, "loss": loss.item(),
+        # 循环每次只调用一局，不能把前面完整对局的诊断覆盖成最后一局。
+        progress_path = Path(str(output) + ".progress.json")
+        progress = json.loads(progress_path.read_text(encoding="utf-8")) if progress_path.exists() else []
+        progress = [entry for entry in progress if entry["seed"] != seed] + [result]
+        temporary_progress = progress_path.with_suffix(progress_path.suffix + ".tmp")
+        temporary_progress.write_text(json.dumps(progress, indent=2), encoding="utf-8")
+        temporary_progress.replace(progress_path)
+        log_event({"event": "game-finished", "scores": result["score"], "search": search_stats,
+                   "seconds": result["seconds"], "scoreStats": score_stats,
+                   "valueMSE": result["valueMSE"], "partsMSE": result["partsMSE"]})
+        print(json.dumps({"phase": "selfplay", "game": previous + game + 1, "loss": loss.item(),
                           "learnerSeats": result["learnerSeats"], "searchNodes": search_nodes,
+                          "search": search_stats, "partsMSE": result["partsMSE"],
+                          "valueMSE": result["valueMSE"], "gradientNorm": result["gradientNorm"],
                           "scores": {key: item["total"] for key, item in result["score"]["players"].items()}}), flush=True)
     return history
 
@@ -282,7 +401,7 @@ def main():
             seen_games.update(resume.get("seenGames", []))
             imitation = {"resumedFrom": str(args.resume), "validation": metrics(model, validation)}
         else:
-            model = PolicyValue(*dimensions)
+            model = PolicyValue(*dimensions, score_parts=all("finalParts" in row for row in rows))
             optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
             imitation = distill(model, optimizer, train, validation, args.epochs, rng)
             save_checkpoint(args.out_dir / "imitation.pt", model, meta, phase="imitation",

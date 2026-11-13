@@ -131,7 +131,7 @@ def disk_bytes(folder):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--out-dir", type=Path, default=ROOT / ".local/ai/continuous-r8")
+    parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--generations", type=int, default=0, help="总目标代数；0 为持续运行")
     args = parser.parse_args()
     if args.generations < 0:
@@ -140,7 +140,7 @@ def main():
     for key in ("input", "initialCheckpoint", "catalog", "weights"):
         if config.get(key):
             config[key] = str((ROOT / config[key]).resolve())
-    folder = args.out_dir.resolve()
+    folder = (args.out_dir or ROOT / config.get("outputDirectory", ".local/ai/continuous-r9")).resolve()
     folder.mkdir(parents=True, exist_ok=True)
     state_path = folder / "loop-state.json"
     stop_path = folder / "STOP"
@@ -195,7 +195,7 @@ def main():
                         rng = TRAIN.random.Random(7)
                         train, validation, validation_games = TRAIN.split_games(rows, rng)
                         torch.manual_seed(7)
-                        model = TRAIN.PolicyValue(*dimensions)
+                        model = TRAIN.PolicyValue(*dimensions, score_parts=config.get("auxiliaryParts", False))
                         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
                         report = TRAIN.distill(model, optimizer, train, validation, config["epochs"], rng)
                         atomic_json(initial / "training-report.json",

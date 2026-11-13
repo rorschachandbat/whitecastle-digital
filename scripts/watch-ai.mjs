@@ -15,16 +15,23 @@ const { values } = parseArgs({ options: {
 } });
 const interval = Number(values.interval);
 if (!Number.isFinite(interval) || interval < 1 || interval > 60) throw new Error('AI_BAD_REFRESH_INTERVAL');
-const defaults = values.directory ? null
-  : JSON.parse(await fs.readFile(path.join(root, 'data/bga-live-ai.json'), 'utf8'));
-const directory = values.directory ? path.resolve(values.directory) : path.resolve(root, defaults.loopDirectory);
+let defaultDirectory;
+if (!values.directory) {
+  // 日志跟随训练实验，而不是仍在保留旧冠军的侧栏；旧分支缺少配置项时再回退。
+  const training = await fs.readFile(path.join(root, 'data/ai-training-loop.json'), 'utf8')
+    .then(JSON.parse).catch((error) => { if (error.code !== 'ENOENT') throw error; return {}; });
+  defaultDirectory = training.outputDirectory
+    ?? JSON.parse(await fs.readFile(path.join(root, 'data/bga-live-ai.json'), 'utf8')).loopDirectory;
+}
+const directory = values.directory ? path.resolve(values.directory) : path.resolve(root, defaultDirectory);
 const model = path.basename(directory).replace(/^continuous-/, '');
 const stateFile = path.join(directory, 'loop-state.json');
 const logFile = values.log ? path.resolve(values.log) : path.join(path.dirname(directory), `train-${model}.stdout.log`);
 const errorFile = values['error-log'] ? path.resolve(values['error-log'])
   : path.join(path.dirname(directory), `train-${model}.stderr.log`);
 const phases = { selfplay: 'live.phase.selfplay', evaluation: 'live.phase.evaluation',
-  warmup: 'live.phase.warmup', initializing: 'live.phase.warmup', stopped: 'live.phase.stopped' };
+  warmup: 'live.phase.warmup', initializing: 'live.phase.warmup', stopped: 'live.phase.stopped',
+  'target-complete': 'trainingLog.targetComplete' };
 let lastState = null;
 let stopping = false;
 process.on('SIGINT', () => { stopping = true; });
@@ -87,6 +94,11 @@ async function render() {
         sixty: number(100 * stats.atLeast60 / stats.count, 1),
         eighty: number(100 * stats.atLeast80 / stats.count, 1),
       }));
+      if (Number.isFinite(stats.atLeast100)) output.push(text('trainingLog.hundred', {
+        hundred: number(100 * stats.atLeast100 / stats.count, 1),
+      }));
+      if (stats.averageParts) output.push(text('trainingLog.parts',
+        Object.fromEntries(Object.entries(stats.averageParts).map(([key, value]) => [key, number(value, 2)]))));
     } else output.push(text('trainingLog.noScores'));
     const updated = Number(state.updatedAt);
     output.push(text('trainingLog.updated', {
@@ -106,6 +118,11 @@ async function render() {
         own: row.learnerSeats.map((seat) => `${seat}=${row.scores[seat]}`).join(' / '),
         scores: Object.entries(row.scores).map(([seat, score]) => `${seat}=${score}`).join(' / '),
         nodes: row.searchNodes ?? 0,
+      }));
+      if (row.search) output.push(text('trainingLog.search', {
+        seconds: number(row.search.seconds, 1), failed: row.search.failed ?? 0,
+        unfinished: row.search.unfinished ?? 0,
+        valueMSE: number(row.valueMSE, 4), partsMSE: number(row.partsMSE, 4),
       }));
     }
   }

@@ -66,7 +66,7 @@ test('公开选牌使用主训练编码，三组配对及当前行动者准确�
   const result = prepareLiveAdvice(fixture(), parameters);
   assert.equal(result.actor, '101');
   assert.equal(result.scope, 'starting-draft-only');
-  assert.equal(result.observation.state.length, 2345);
+  assert.equal(result.observation.state.length, 2357);
   assert.equal(result.observation.candidates.length, 3);
   assert.equal(result.observation.candidates[0].length, 160);
   assert.equal(result.candidates[0].resourceInstance, 'resource-0');
@@ -220,6 +220,51 @@ test('侧栏按所选版本固定冠军，旧摆设与初始权重可对照，�
   assert.equal((await ai.analyze(fixture(), { modelId: '../r4' })).code, 'AI_MODEL_INVALID');
 });
 
+test('旧v3选牌和放骰兼容只去掉结构特征，不重复修正灯笼；未知编码拒绝推理', async (t) => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'whitecastle-live-v3-'));
+  t.after(() => fs.rmSync(temporaryRoot, { recursive: true }));
+  fs.mkdirSync(path.join(temporaryRoot, 'data'));
+  for (const name of ['whitecastle-2p.json', 'ai-heuristic.json', 'bga-mapping.json']) {
+    fs.copyFileSync(new URL(`../data/${name}`, import.meta.url), path.join(temporaryRoot, 'data', name));
+  }
+  fs.writeFileSync(path.join(temporaryRoot, 'data/bga-live-ai.json'), JSON.stringify({
+    loopDirectory: '.local/ai/continuous-r8',
+  }));
+  const loop = path.join(temporaryRoot, '.local/ai/continuous-r8');
+  fs.mkdirSync(loop, { recursive: true });
+  const live = playingFixture();
+  fs.mkdirSync(path.join(temporaryRoot, '.local/bga-live/contexts'), { recursive: true });
+  fs.writeFileSync(path.join(temporaryRoot, '.local/bga-live/contexts/123.json'),
+    JSON.stringify(live.context));
+  const stateFile = path.join(loop, 'loop-state.json');
+  let expectedLanternCompat = false;
+  let calls = 0;
+  const ai = createLiveAi({ root: temporaryRoot, inferModel: async (observation, c) => {
+    calls += 1;
+    assert.equal(observation.state.length, 2345);
+    assert.equal(c.lanternCompat, expectedLanternCompat);
+    return { source: 'continuous-champion', model: 'initial',
+      policy: observation.candidates.map(() => 1 / observation.candidates.length) };
+  } });
+  for (const version of ['public-decisions-v3', 'public-decisions-v2', 'unknown-encoding']) {
+    expectedLanternCompat = version === 'public-decisions-v2';
+    fs.writeFileSync(stateFile, JSON.stringify({
+      meta: { ...config.meta, featureVersion: version, encoderHash: 'legacy-source' },
+      champion: path.join(loop, 'initial/imitation.pt'),
+    }));
+    const result = await ai.analyze(fixture());
+    if (version === 'unknown-encoding') assert.equal(result.code, 'AI_MODEL_CONFIG_MISMATCH');
+    else {
+      assert.equal(result.status, 'ready', JSON.stringify(result));
+      assert.equal(result.lanternAdjusted, expectedLanternCompat);
+      const playing = await ai.analyze(live.latest);
+      assert.equal(playing.status, 'ready', JSON.stringify(playing));
+      assert.equal(playing.lanternAdjusted, expectedLanternCompat);
+    }
+  }
+  assert.ok(calls >= 4);
+});
+
 function playingFixture() {
   const opening = fixture();
   opening.changedAt = '2026-11-12T01:00:00Z';
@@ -262,7 +307,7 @@ test('普通放骰还原双方回合、占位和公开牌背，保持主模型�
   const result = preparePlayingAdvice(latest, { ...parameters, context });
   assert.equal(result.scope, 'placement-root-only');
   assert.equal(result.actor, '100');
-  assert.equal(result.observation.state.length, 2345);
+  assert.equal(result.observation.state.length, 2357);
   assert.equal(result.observations.length, 6);
   assert.equal(result.observation.state[5], 1 / 3);
   assert.equal(result.observation.state[6], 1 / 3);
@@ -402,7 +447,7 @@ test('资源连锁接入同一主编码；已点选部分资源不会当作未�
   const { current, context } = chainFixture('chooseResource');
   const result = prepareChainAdvice(current, { ...parameters, context });
   assert.equal(result.observation.request, 'chooseResource');
-  assert.equal(result.observation.state.length, 2345);
+  assert.equal(result.observation.state.length, 2357);
   assert.deepEqual(result.candidates.map((candidate) => candidate.resource), ['food', 'iron', 'pearl']);
   current.observation.decision.buttons.push({ id: 'twc-perform-action-confirm', disabled: true, icons: ['food', 'resource'] });
   assert.throws(() => prepareChainAdvice(current, { ...parameters, context }), { code: 'BGA_ADVICE_RESOURCE_PARTIAL' });

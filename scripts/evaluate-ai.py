@@ -61,7 +61,8 @@ def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitati
                             network = model if actor == seat else (imitation if opponent == "imitation" else frozen)
                             with torch.no_grad():
                                 logits, _ = infer(network, observation)
-                                if search_config:
+                                if search_config and (search_config.get("decisionScope", "all") == "all"
+                                                      or observation.get("boundary", False)):
                                     search = rules.request(op="search", policy=logits.softmax(-1).tolist(),
                                                            settings={**search_config, "seed": f"{seed}:{observation['decisions']}"})
                                     index = max(range(len(search["policy"])), key=search["policy"].__getitem__)
@@ -78,6 +79,8 @@ def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitati
                     other = observation["score"]["players"]["1" if seat == "0" else "0"]["total"]
                     game = {"opponent": opponent, "seed": seed, "seat": seat, "win": observation["score"]["winner"] == seat,
                             "ownScore": own, "opponentScore": other, "margin": own - other,
+                            "parts": observation["score"]["players"][seat]["parts"],
+                            "diagnostics": observation.get("diagnostics"),
                             "decisions": observation["decisions"]}
                     games.append(game)
                     print(json.dumps(game), flush=True)
@@ -93,7 +96,10 @@ def evaluate(model_path, output, pairs=4, opponents=("random", "guide"), imitati
                              "averageMargin": sum(game["margin"] for game in subset) / len(subset),
                              "maximumScore": max(game["ownScore"] for game in subset),
                              "atLeast60": sum(game["ownScore"] >= 60 for game in subset),
-                             "atLeast80": sum(game["ownScore"] >= 80 for game in subset)}
+                             "atLeast80": sum(game["ownScore"] >= 80 for game in subset),
+                             "atLeast100": sum(game["ownScore"] >= 100 for game in subset),
+                             "averageParts": {key: sum(game["parts"][key] for game in subset) / len(subset)
+                                              for key in subset[0]["parts"]}}
     report = {"meta": meta, "model": str(model_path), "summary": summary, "games": games,
               "seconds": time.monotonic() - started, "search": search_config,
               "limitations": ["local-practice-v1", "small-sample", "paired-games-not-independent",

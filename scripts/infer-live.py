@@ -41,6 +41,8 @@ def main():
     state = json.loads((args.loop / "loop-state.json").read_text(encoding="utf-8"))
     keys = [key for key in META_KEYS if not (args.allow_legacy_setup and key == "setupVersion")]
     if args.allow_feature_compat:
+        if state["meta"].get("featureVersion") not in ("public-decisions-v2", "public-decisions-v3"):
+            raise ValueError("AI_MODEL_CONFIG_MISMATCH")
         keys = [key for key in keys if key not in ("featureVersion", "encoderHash")]
     if any(state["meta"].get(key) != request["meta"].get(key) for key in keys):
         raise ValueError("AI_MODEL_CONFIG_MISMATCH")
@@ -49,6 +51,9 @@ def main():
     torch.set_num_threads(2)
     # 兼容旧冠军时只跳过编码版本；其余元数据仍核对，避免静默混用目录或启发式。
     model, checkpoint = load_checkpoint(checkpoint_path)
+    if args.allow_feature_compat and (model.state_size != 2345 or model.option_size != 160
+                                     or checkpoint["meta"] != state["meta"]):
+        raise ValueError("AI_MODEL_CONFIG_MISMATCH")
     for key in keys:
         if checkpoint["meta"].get(key) != request["meta"].get(key):
             raise ValueError(f"AI_MODEL_CONFIG_MISMATCH:{key}")

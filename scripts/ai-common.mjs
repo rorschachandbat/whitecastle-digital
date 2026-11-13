@@ -28,6 +28,8 @@ export function loadTrainingConfig(catalogPath, weightsPath) {
       setupVersion: LOCAL_SETUP_VERSION, rewardVersion: REWARD_VERSION,
       catalogHash: digest(catalog), heuristicHash: digest(weights),
       encoderHash: createHash('sha256').update(fs.readFileSync(path.join(projectRoot, 'src/ai/features.js')))
-        .update(fs.readFileSync(path.join(projectRoot, 'src/ai/environment.js'))).digest('hex') },
+        .update(fs.readFileSync(path.join(projectRoot, 'src/ai/environment.js')))
+        .update(fs.readFileSync(path.join(projectRoot, 'src/ai/highScore.js')))
+        .update(fs.readFileSync(path.join(projectRoot, 'src/ai/heuristicPolicy.js'))).digest('hex') },
   };
 }

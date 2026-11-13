@@ -35,6 +35,29 @@ class ModelTests(unittest.TestCase):
         self.assertFalse({row["game"] for row in train} & {row["game"] for row in validation})
         self.assertEqual(len(train) + len(validation), len(rows))
 
+    def test_parts_head_gradients_targets_and_checkpoint_reload(self):
+        parts = dict(zip(TRAIN.SCORE_PARTS, [10, 2, 3, 30, 40, 11, 4]))
+        rows = [{"state": [0.1, 0.2], "finalScore": 100, "finalParts": parts}]
+        model = PolicyValue(2, 2, score_parts=True)
+        loss = TRAIN.auxiliary_loss(model, rows)
+        loss.backward()
+        self.assertTrue(torch.isfinite(loss))
+        self.assertIsNotNone(model.parts[2].weight.grad)
+        self.assertIsNotNone(model.state_encoder[0].weight.grad)
+        self.assertAlmostEqual(TRAIN.parts_targets(rows).sum().item(), 1.25)
+        with self.assertRaisesRegex(ValueError, "BAD_PARTS_TARGET"):
+            TRAIN.parts_targets([{**rows[0], "finalScore": 99}])
+        with self.assertRaisesRegex(ValueError, "BAD_PARTS_TARGET"):
+            TRAIN.parts_targets([{**rows[0], "finalParts": {**parts, "warrior": float("nan")}}])
+        meta = {key: "parts-test" for key in TRAIN.META_KEYS}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "parts.pt"
+            save_checkpoint(path, model, meta)
+            restored, checkpoint = load_checkpoint(path, meta)
+            self.assertTrue(checkpoint["scoreParts"])
+            self.assertTrue(torch.equal(model.predict_parts(torch.tensor([[0.1, 0.2]])),
+                                        restored.predict_parts(torch.tensor([[0.1, 0.2]]))))
+
     def test_checkpoint_reload_and_config_rejection(self):
         meta = {key: "v1" for key in TRAIN.META_KEYS}
         with tempfile.TemporaryDirectory() as directory:

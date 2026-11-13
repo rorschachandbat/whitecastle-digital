@@ -39,6 +39,7 @@ const sourceFiles = [
   'src/ui/play.js', 'src/ui/actionStory.js', 'src/engine/localMatch.js', 'src/engine/actionOptions.js',
   'src/engine/influence.js', 'src/game/game.js', 'src/game/localClient.js', 'scripts/serve-play.mjs',
   'src/ai/environment.js', 'src/ai/features.js', 'src/ai/heuristicPolicy.js', 'src/ai/playOpponent.js',
+  'src/ai/highScore.js', 'src/ai/routeSearch.js',
   'scripts/ai-common.mjs', 'scripts/ai-env-server.mjs', 'scripts/generate-training-data.mjs', 'scripts/play-ai.mjs',
   'src/ui/bgaReplay.js', 'src/integrations/bgaDom.js', 'src/integrations/bgaReplay.js',
   'scripts/import-bga-replay.mjs',

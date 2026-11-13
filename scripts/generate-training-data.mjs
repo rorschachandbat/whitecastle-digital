@@ -8,14 +8,17 @@ import { TrainingEnvironment } from '../src/ai/environment.js';
 import { chooseHeuristic } from '../src/ai/heuristicPolicy.js';
 import { loadTrainingConfig } from './ai-common.mjs';
 import { SCORE_SCALE } from '../src/ai/objective.js';
+import { searchRoutes } from '../src/ai/routeSearch.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values } = parseArgs({ options: {
   games: { type: 'string', default: '16' }, out: { type: 'string' },
   prefix: { type: 'string', default: 'ai-guide-v1' }, catalog: { type: 'string' }, weights: { type: 'string' },
+  'search-config': { type: 'string' },
 } });
 const { catalog, weights, meta } = loadTrainingConfig(values.catalog, values.weights);
 const games = Number(values.games);
+const searchConfig = values['search-config'] ? JSON.parse(fs.readFileSync(values['search-config'], 'utf8')).search : null;
 if (!Number.isSafeInteger(games) || games < 2 || games > 100000) throw new Error('AI_INVALID_GAME_COUNT');
 const output = path.resolve(values.out ?? path.join(root, '.local', 'ai', 'guide.jsonl.gz'));
 fs.mkdirSync(path.dirname(output), { recursive: true });
@@ -35,22 +38,41 @@ for (let game = 0; game < games; game += 1) {
     const environment = new TrainingEnvironment(catalog, weights);
     let observation = environment.reset(seed, game % 2 ? ['1', '0'] : ['0', '1']);
     let step = 0;
+    let searchCalls = 0;
+    let searchSeconds = 0;
     while (!observation.done) {
-      const best = chooseHeuristic(observation.heuristic);
+      let best = chooseHeuristic(observation.heuristic);
+      let search;
+      if (searchConfig && observation.boundary && observation.candidates.length > 1) {
+        const peak = Math.max(...observation.heuristic);
+        const exp = observation.heuristic.map((value) => Math.exp((value - peak) / 3));
+        const total = exp.reduce((sum, value) => sum + value, 0);
+        console.log(JSON.stringify({ event: 'teacher-search', game: game + 1, step, seed }));
+        search = searchRoutes(environment, exp.map((value) => value / total),
+          { ...searchConfig, seed: `teacher:${seed}:${step}` });
+        if (search.searched) best = chooseHeuristic(search.policy);
+        searchCalls += 1;
+        searchSeconds += search.seconds ?? 0;
+      }
       rows.push({ ...meta, state: observation.state, candidates: observation.candidates,
         teacher: best, heuristic: observation.heuristic, actor: observation.actor,
-        game: seed, step: step++, request: observation.request });
+        game: seed, step: step++, request: observation.request,
+        diagnostics: observation.diagnostics, search: search ?? null });
       observation = environment.step(best);
     }
     if (observation.placements !== 18 || !observation.score.complete) throw new Error('AI_INCOMPLETE_GAME');
     for (const row of rows) {
       row.finalScore = observation.score.players[row.actor].total;
       row.z = row.finalScore / SCORE_SCALE;
+      row.finalParts = observation.score.players[row.actor].parts;
+      row.policyWeight = 1 + Math.min(1.5, Math.max(0, row.finalScore - 30) / 40);
       if (!stream.write(`${JSON.stringify(row)}\n`)) await once(stream, 'drain');
       records += 1;
     }
-    results.push({ seed, decisions: observation.decisions, score: observation.score });
-    console.log(JSON.stringify({ game: game + 1, games, records, seconds: (Date.now() - started) / 1000 }));
+    results.push({ seed, decisions: observation.decisions, score: observation.score, diagnostics: observation.diagnostics,
+      searchCalls, searchSeconds });
+    console.log(JSON.stringify({ game: game + 1, games, records, seconds: (Date.now() - started) / 1000,
+      scores: observation.score.players, searchCalls, searchSeconds }));
   } catch (error) {
     stream.end();
     throw new Error(`AI_GAME_FAILED:${seed}:${error.code ?? error.message}`, { cause: error });

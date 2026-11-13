@@ -99,12 +99,16 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
       const state = await read(path.join(c.loop, 'loop-state.json'));
       const legacySetup = state.meta?.setupVersion !== c.meta.setupVersion;
       const featureCompat = state.meta?.featureVersion !== FEATURE_VERSION;
+      if (featureCompat && !['public-decisions-v2', 'public-decisions-v3'].includes(state.meta?.featureVersion)) {
+        fail('AI_MODEL_CONFIG_MISMATCH');
+      }
       const ignored = new Set(['setupVersion', ...(featureCompat ? ['featureVersion', 'encoderHash'] : [])]);
       const expected = Object.fromEntries(Object.entries(c.meta).filter(([key]) => !ignored.has(key)));
       if (!sameMeta(state.meta, expected)) fail('AI_MODEL_CONFIG_MISMATCH');
       c.generation = championGeneration(state.champion);
       c.legacySetup = legacySetup;
       c.featureCompat = featureCompat;
+      c.lanternCompat = state.meta?.featureVersion === 'public-decisions-v2';
       if (!c.generation) fail('AI_CHAMPION_INVALID');
       worker = inferModel ? null : await inferenceSession(c);
       const infer = async (observation, observations) => {
@@ -117,15 +121,22 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
         if (result.model !== c.generation) fail('AI_CHAMPION_CHANGED');
         return result;
       };
-      const session = getPlayingSession(prepared) ?? getDraftSession(prepared);
+      const playingSession = getPlayingSession(prepared);
+      const session = playingSession ?? getDraftSession(prepared);
       const searchDeadline = Date.now() + Math.max(1000, (c.timeoutMilliseconds ?? 120000) - 5000);
       if (c.featureCompat && session) {
-        session.env.lanternExpansion = false;
-        prepared = { ...prepared, observation: session.env.observe(),
-          observations: publicObservations(session.env, session.uncertainPriority) };
+        session.env.legacyFeatureEncoding = true;
+        // v3已经展开灯笼收益；只有v2需要旧编码和额外的灯笼排序修正。
+        session.env.lanternExpansion = !c.lanternCompat;
+        // 选牌会话没有完整的对局 state，不能调用仅适用于进行中对局的公开置换观察。
+        // 推理端会在 observations 缺失时退回单观察；进行中对局仍保留未知补牌的置换输入。
+        prepared = { ...prepared, observation: session.env.observe() };
+        if (playingSession) {
+          prepared.observations = publicObservations(session.env, session.uncertainPriority);
+        }
       }
       const result = await infer(prepared.observation, prepared.observations);
-      const adjust = (policy, env) => c.featureCompat ? adjustPolicyForLantern(policy, env, c.weights) : policy;
+      const adjust = (policy, env) => c.lanternCompat ? adjustPolicyForLantern(policy, env, c.weights) : policy;
       let plan = null;
       let rootPolicy = result.policy;
       let search = null;
@@ -166,7 +177,7 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
         }
       }
       return { status: 'ready', actor: prepared.actor, scope: prepared.scope,
-        modelId: c.modelId, legacySetup: c.legacySetup, lanternAdjusted: c.featureCompat,
+        modelId: c.modelId, legacySetup: c.legacySetup, lanternAdjusted: c.lanternCompat,
         model: result.model, source: result.source, method: search?.searched ? 'score-search' : 'policy-only',
         search, plan, uncertainties: prepared.uncertainties ?? [],
         candidates: prepared.candidates.map((candidate, index) => ({ ...candidate,

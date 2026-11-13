@@ -2,6 +2,7 @@
 import gzip
 import importlib.util
 import json
+import math
 import sys
 import tempfile
 import unittest
@@ -41,7 +42,90 @@ class FakeRules:
                 "candidates": [[1, 0], [0, 1]], "heuristic": [0, 1], "request": "root"}
 
 
+class PartsRules(FakeRules):
+    def request(self, op, **kwargs):
+        result = super().request(op, **kwargs)
+        if op == "search":
+            return {**result, "seconds": 0.2, "cutoff": 2, "failed": 0, "unfinished": 0}
+        if result.get("done"):
+            for player in result["score"]["players"].values():
+                player["parts"] = {key: 0 for key in TRAIN.SCORE_PARTS}
+                player["parts"]["courtier"] = player["total"]
+        else:
+            result["boundary"] = self.step == 0
+            result["choices"] = [{"value": "food"}, {"value": "pearl"}]
+        return result
+
+
 class ScoreTests(unittest.TestCase):
+    def test_resumed_game_keeps_progress_and_logs_opponent_and_sampling_entropy(self):
+        meta = {key: "resume-log-test" for key in META_KEYS}
+        meta["rewardVersion"] = REWARD_VERSION
+        model = PolicyValue(2, 2, score_parts=True)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            output = folder / "model.pt"
+            seen = set()
+            league = [PolicyValue(2, 2, score_parts=True)]
+            TRAIN.reinforce(model, optimizer, PartsRules(), 1, "resume-log", output,
+                            meta, seen, league=league, experience_dir=folder / "experience",
+                            search_config={"decisionScope": "boundary"})
+            restored, checkpoint = load_checkpoint(output, meta)
+            restored_optimizer = torch.optim.Adam(restored.parameters(), lr=0.001)
+            TRAIN.reinforce(restored, restored_optimizer, PartsRules(), 1, "resume-log", output,
+                            meta, seen, resume=checkpoint, league=league,
+                            experience_dir=folder / "experience",
+                            search_config={"decisionScope": "boundary"})
+            progress = json.loads(Path(str(output) + ".progress.json").read_text())
+            self.assertEqual([entry["game"] for entry in progress], [1, 2])
+            self.assertEqual([entry["seed"] for entry in progress], ["resume-log-0", "resume-log-1"])
+            self.assertEqual(progress[1]["learnerSeats"], ["0"])
+            events = [json.loads(line) for line in Path(str(output) + ".decisions.jsonl").read_text().splitlines()]
+            decisions = [event for event in events if event["event"] == "decision"]
+            self.assertEqual(len(decisions), 4)
+            self.assertEqual(sum(not event["learner"] for event in decisions), 1)
+            for event in decisions:
+                self.assertEqual(event["candidateCount"], 2)
+                self.assertEqual(len(event["topChoices"]), 2)
+                by_index = sorted(event["topChoices"], key=lambda item: item["index"])
+                base = [item["probability"] for item in by_index]
+                expected = -sum(p * math.log(p) for p in base if p > 0)
+                self.assertAlmostEqual(event["policyEntropy"], expected, places=5)
+                target = event["search"]["policy"] if event["search"] and event["search"].get("searched") else base
+                sampled = [0.9 * p + 0.1 * q for p, q in zip(target, base)] if event["search"] else base
+                self.assertAlmostEqual(event["samplingEntropy"],
+                                       -sum(p * math.log(p) for p in sampled if p > 0), places=5)
+                self.assertAlmostEqual(event["samplingProbability"], sampled[event["choiceIndex"]], places=5)
+
+    def test_parts_training_boundary_search_and_diagnostic_logs(self):
+        meta = {key: "parts-test" for key in META_KEYS}
+        meta["rewardVersion"] = REWARD_VERSION
+        model = PolicyValue(2, 2, score_parts=True)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            result = TRAIN.reinforce(model, optimizer, PartsRules(), 1, "parts-test", folder / "model.pt",
+                                     meta, set(), experience_dir=folder / "experience",
+                                     search_config={"decisionScope": "boundary"})[0]
+            self.assertEqual(result["search"]["calls"], 1)
+            self.assertEqual(result["search"]["cutoff"], 2)
+            self.assertEqual(result["search"]["seconds"], 0.2)
+            self.assertGreaterEqual(result["partsMSE"], 0)
+            self.assertGreater(result["gradientNorm"], 0)
+            _, checkpoint = load_checkpoint(folder / "model.pt", meta)
+            self.assertEqual(checkpoint["scoreStats"]["averageParts"]["courtier"], 77.5)
+            self.assertEqual(checkpoint["scoreStats"]["atLeast100"], 0)
+            events = [json.loads(line) for line in (folder / "model.pt.decisions.jsonl").read_text().splitlines()]
+            self.assertEqual(events[0]["event"], "game-start")
+            self.assertEqual(events[-1]["event"], "game-finished")
+            decisions = [event for event in events if event["event"] == "decision"]
+            self.assertEqual(len(decisions), 2)
+            for event in decisions:
+                self.assertIn(event["choice"]["value"], ("food", "pearl"))
+                self.assertGreater(event["policyProbability"], 0)
+                self.assertGreater(event["samplingProbability"], 0)
+
     def test_both_seats_learn_own_score_even_when_losing_and_above_eighty(self):
         meta = {key: "test" for key in META_KEYS}
         meta["rewardVersion"] = REWARD_VERSION

@@ -1,5 +1,7 @@
 import { cardOf, ROWS } from './features.js';
 import { expandLanternEffects, lanternBacks } from './lanternEffects.js';
+import { personalField } from '../engine/cardRules.js';
+import { highScoreStructure } from './highScore.js';
 
 /** 攻略只提供可调整的软偏好，不改变规则或终局胜负。 */
 export function heuristicScore(env, option, weights) {
@@ -8,11 +10,32 @@ export function heuristicScore(env, option, weights) {
   const player = probe?.request?.player ?? state?.players[env.actor] ?? match.draft.players[env.actor];
   const round = state?.round ?? 1;
   const stage = weights.rounds[Math.max(0, round - 1)];
+  const highScore = weights.highScore;
   const value = option.value;
   const object = typeof value === 'object' && value !== null ? value : {};
   const action = option.action;
   const asset = (type) => {
     if (type === 'food' && (player?.figures?.gardener.length ?? 0) >= 5) return 0.1;
+    if (highScore && ROWS.includes(type)) {
+      const figures = player?.figures?.[type] ?? [];
+      if (type !== 'courtier' && figures.length >= 5) return 0;
+      const r = player?.resources ?? {};
+      const structure = highScoreStructure(player, match.config);
+      if (type === 'courtier') {
+        const canEnter = figures.length < 5 && r.coin >= 2;
+        const canPromote = figures.some((figure) => figure.location !== 'floor3') && r.pearl >= 2;
+        if (!canEnter && !canPromote) return 0;
+        return stage.courtier * (r.pearl >= 2 ? 1 : 0.35)
+          + (r.pearl >= 2 ? structure.warriorValue + 3 : 0);
+      }
+      if (type === 'warrior') {
+        if (r.iron < 1 && r.seal < 2) return 0;
+        return stage.warrior * (structure.internal ? 1 : 0.3) + structure.internal;
+      }
+      const affordable = match.config.setup.gardens.some((garden) =>
+        !figures.some((figure) => figure.cardId === garden.cardId) && cardOf(match, garden.cardId).foodCost <= r.food);
+      return affordable ? stage.gardener : 0;
+    }
     const amount = player?.resources?.[type] ?? 0;
     return (stage[type] ?? weights.effect[type] ?? 0) * (amount >= 7 && ['food', 'iron', 'pearl'].includes(type) ? 0.1 : 1);
   };
@@ -21,7 +44,8 @@ export function heuristicScore(env, option, weights) {
   const effects = (items = []) => expandLanternEffects(items, backs)
     .filter((effect) => effect.type !== 'lantern')
     .reduce((sum, effect) => sum + asset(effect.type) * effect.amount, 0);
-  const field = (item) => effects(item?.effects) - effects(item?.cost) * 0.6;
+  const field = (item) => highScore && item?.cost?.some((cost) => (player?.resources?.[cost.type] ?? 0) < cost.amount)
+    ? -3 : effects(item?.effects) - effects(item?.cost) * 0.6;
   let result = 0;
   if (typeof value === 'string') result += asset(value);
   if (object.skip) result -= weights.skipPenalty;
@@ -39,18 +63,38 @@ export function heuristicScore(env, option, weights) {
   if (object.type === 'warrior' && !object.skip) {
     const zone = match.config.trainingZones.find((item) => item.id === object.yardId);
     const internal = (player.figures.courtier ?? []).filter((item) => item.location !== 'gate').length;
-    result += stage.warrior + zone.value * internal * weights.points - zone.ironCost * asset('iron') * 0.5;
+    const remaining = Math.max(0, (3 - round) * 3 + 3 - (state.turnsUsed?.[env.actor] ?? 0));
+    const projected = highScore ? Math.min(5, internal + (5 - internal)
+      * highScore.futureCourtierFraction * remaining / 9) : internal;
+    result += stage.warrior + zone.value * projected * weights.points - zone.ironCost * asset('iron') * 0.5;
     for (const id of object.faceOrder) result += field(match.config.yardFaces.find((face) => face.id === id));
   }
   if (object.type === 'courtier' && !object.skip) {
     result += object.audience ? stage.courtier - asset('coin') : 0;
     result += object.promote ? stage.courtier + object.promote.steps * 2.5
       - (object.promote.steps === 2 ? 5 : 2) * asset('pearl') * 0.5 : 0;
+    if (highScore && object.promote) {
+      const from = ['gate', 'floor1', 'floor2', 'floor3'].indexOf(player.figures.courtier[object.promote.figureIndex]?.location ?? 'gate');
+      const to = from + object.promote.steps;
+      const marginal = [1, 3, 6, 10][to] - [1, 3, 6, 10][from]
+        + (from === 0 ? highScoreStructure(player, match.config).warriorValue : 0);
+      result += marginal * highScore.marginalScore;
+      if (to === 3) {
+        result += effects([{ type: 'lantern', amount: 1 }]);
+        result += field(cardOf(match, state.topCardId)?.fields.find((item) => item.id === object.promote.slotId));
+      } else {
+        const room = state.castleRooms.find((item) => item.id === object.promote.roomId);
+        result += field(cardOf(match, room?.cardId)?.fields.find((item) => item.id === object.promote.fieldId));
+      }
+    }
   }
   if (['domain', 'castleAny', 'castleLight', 'castleCoral', 'castleBlack', 'castleWhite'].includes(object.type) && !object.skip) {
     if (object.type === 'domain') {
       const current = cardOf(match, player.currentCard);
-      result += effects(current?.fields.flatMap((item) => item.effects)) + weights.chain;
+      const row = match.config.personalDomainRows.find((item) => item.id === object.row);
+      const count = player.figures[row.figureType].length;
+      result += field(personalField(current, object.row))
+        + effects([row.baseGain, ...row.revealedGains.slice(0, count)]) + weights.chain;
     } else {
       const room = state.castleRooms.find((item) => item.id === object.roomId);
       result += field(cardOf(match, room.cardId)?.fields.find((item) => item.id === object.fieldId)) + weights.chain;
@@ -79,9 +123,13 @@ export function heuristicScore(env, option, weights) {
       }
     }
     if (action.target.area === 'personal') {
-      result += effects(cardOf(match, player.currentCard)?.fields.flatMap((item) => item.effects)) + weights.chain;
+      const row = match.config.personalDomainRows.find((item) => item.id === action.target.row);
+      result += field(personalField(cardOf(match, player.currentCard), action.target.row))
+        + effects([row.baseGain, ...row.revealedGains.slice(0, player.figures[row.figureType].length)]) + weights.chain;
     }
-    if (action.target.area === 'outside') result += Math.max(stage.courtier, stage.gardener, stage.warrior);
+    if (action.target.area === 'outside') result += highScore
+      ? Math.max(...(action.target.id === 'left' ? ['courtier', 'gardener'] : ['courtier', 'warrior']).map(asset))
+      : Math.max(stage.courtier, stage.gardener, stage.warrior);
     if (action.target.area === 'well') result += weights.well;
     if (bridge.dice.length === 1 && round < 3) {
       const own = player.figures.gardener.filter((figure) => figure.bridgeId === bridge.id).length;

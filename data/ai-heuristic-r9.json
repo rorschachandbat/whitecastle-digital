@@ -1,0 +1,24 @@
+{
+  "version": "high-score-prior-v2",
+  "rounds": [
+    { "food": 1.2, "pearl": 1.7, "iron": 1.2, "coin": 0.9, "seal": 1.0, "gardener": 4.5, "courtier": 6.5, "warrior": 5.5 },
+    { "food": 0.9, "pearl": 1.8, "iron": 1.4, "coin": 0.9, "seal": 1.0, "gardener": 3.5, "courtier": 6.0, "warrior": 6.5 },
+    { "food": 0.4, "pearl": 1.3, "iron": 1.3, "coin": 0.6, "seal": 0.7, "gardener": 2.5, "courtier": 5.0, "warrior": 6.5 }
+  ],
+  "effect": { "points": 1.0, "influence": 1.0, "lantern": 3.0, "chooseResource": 1.5, "domain": 5.0, "castleAny": 5.0, "castleLight": 3.0, "castleCoral": 4.0, "castleBlack": 4.0, "castleWhite": 4.0, "well": 2.0 },
+  "points": 1.0,
+  "skipPenalty": 0.1,
+  "payGate": 0.0,
+  "exchangePenalty": 1.0,
+  "chain": 4.0,
+  "startLantern": 2.0,
+  "well": 1.0,
+  "clearBridge": 2.0,
+  "highScore": {
+    "futureCourtierFraction": 0.5,
+    "marginalScore": 1.0,
+    "courtiersPerTurn": 0.35,
+    "warriorValuePerTurn": 0.45,
+    "synergyPotential": 0.5
+  }
+}

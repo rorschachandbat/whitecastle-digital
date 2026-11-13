@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch
 
-from ai_model import META_KEYS, infer, load_checkpoint, load_frozen_checkpoint
+from ai_model import META_KEYS, infer, load_checkpoint
 
 
 def champion_checkpoint(loop, state, generation):
@@ -35,17 +35,23 @@ def main():
     parser.add_argument("--generation", default=None)
     parser.add_argument("--stream", action="store_true")
     parser.add_argument("--allow-legacy-setup", action="store_true")
+    parser.add_argument("--allow-feature-compat", action="store_true")
     args = parser.parse_args()
     request = json.loads(sys.stdin.readline()) if args.stream else json.load(sys.stdin)
     state = json.loads((args.loop / "loop-state.json").read_text(encoding="utf-8"))
     keys = [key for key in META_KEYS if not (args.allow_legacy_setup and key == "setupVersion")]
+    if args.allow_feature_compat:
+        keys = [key for key in keys if key not in ("featureVersion", "encoderHash")]
     if any(state["meta"].get(key) != request["meta"].get(key) for key in keys):
         raise ValueError("AI_MODEL_CONFIG_MISMATCH")
     # 指定代数时固定该检查点；未指定时仍只解析当前冠军的目录内相对尾部。
     checkpoint_path, generation = champion_checkpoint(args.loop, state, args.generation)
     torch.set_num_threads(2)
-    loader = load_frozen_checkpoint if args.allow_legacy_setup else load_checkpoint
-    model, _ = loader(checkpoint_path, request["meta"])
+    # 兼容旧冠军时只跳过编码版本；其余元数据仍核对，避免静默混用目录或启发式。
+    model, checkpoint = load_checkpoint(checkpoint_path)
+    for key in keys:
+        if checkpoint["meta"].get(key) != request["meta"].get(key):
+            raise ValueError(f"AI_MODEL_CONFIG_MISMATCH:{key}")
     while True:
         if any(state["meta"].get(key) != request["meta"].get(key) for key in keys):
             raise ValueError("AI_MODEL_CONFIG_MISMATCH")

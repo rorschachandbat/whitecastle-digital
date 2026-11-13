@@ -5,6 +5,8 @@ import { prepareLiveAdvice } from '../src/integrations/bgaLiveAdvice.js';
 import { preparePlayingAdvice, rememberLiveContext, getPlayingSession, publicObservations } from '../src/integrations/bgaLivePlaying.js';
 import { prepareChainAdvice, describeLiveChoice, advancePublic } from '../src/integrations/bgaLiveChain.js';
 import { loadTrainingConfig, projectRoot } from './ai-common.mjs';
+import { FEATURE_VERSION } from '../src/ai/features.js';
+import { adjustPolicyForLantern } from '../src/ai/lanternEffects.js';
 import { createPlayAi, championGeneration } from './play-ai.mjs';
 
 const read = async (file) => JSON.parse(await fs.readFile(file, 'utf8'));
@@ -93,10 +95,13 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
       }
       const state = await read(path.join(c.loop, 'loop-state.json'));
       const legacySetup = state.meta?.setupVersion !== c.meta.setupVersion;
-      const expected = Object.fromEntries(Object.entries(c.meta).filter(([key]) => key !== 'setupVersion'));
+      const featureCompat = state.meta?.featureVersion !== FEATURE_VERSION;
+      const ignored = new Set(['setupVersion', ...(featureCompat ? ['featureVersion', 'encoderHash'] : [])]);
+      const expected = Object.fromEntries(Object.entries(c.meta).filter(([key]) => !ignored.has(key)));
       if (!sameMeta(state.meta, expected)) fail('AI_MODEL_CONFIG_MISMATCH');
       c.generation = championGeneration(state.champion);
       c.legacySetup = legacySetup;
+      c.featureCompat = featureCompat;
       if (!c.generation) fail('AI_CHAMPION_INVALID');
       worker = inferModel ? null : await inferenceSession(c);
       const infer = async (observation, observations) => {
@@ -109,12 +114,20 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
         if (result.model !== c.generation) fail('AI_CHAMPION_CHANGED');
         return result;
       };
-      const result = await infer(prepared.observation, prepared.observations);
       const session = getPlayingSession(prepared);
+      if (c.featureCompat && session) {
+        session.env.lanternExpansion = false;
+        prepared = { ...prepared, observation: session.env.observe(),
+          observations: publicObservations(session.env, session.uncertainPriority) };
+      }
+      const result = await infer(prepared.observation, prepared.observations);
+      const adjust = (policy, env) => c.featureCompat ? adjustPolicyForLantern(policy, env, c.weights) : policy;
       let plan = null;
+      let rootPolicy = result.policy;
       if (session) {
         const { env, uncertainPriority } = session;
-        let index = result.policy.indexOf(Math.max(...result.policy));
+        rootPolicy = adjust(result.policy, env);
+        let index = rootPolicy.indexOf(Math.max(...rootPolicy));
         plan = { rootIndex: index, steps: [], boundary: 'complete' };
         for (let count = 0; count < 32; count += 1) {
           if (!advancePublic(env, index)) { plan.boundary = 'unknown-reveal'; break; }
@@ -122,17 +135,18 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
           const observation = env.observe();
           const next = await infer(observation, publicObservations(env, uncertainPriority));
           if (next.model !== result.model) fail('AI_CHAMPION_CHANGED');
-          index = next.policy.indexOf(Math.max(...next.policy));
+          const adjusted = adjust(next.policy, env);
+          index = adjusted.indexOf(Math.max(...adjusted));
           plan.steps.push({ ...describeLiveChoice(env, env.getLegalActions()[index], latest.archive.publicPosition),
-            policyWeight: next.policy[index] });
+            policyWeight: adjusted[index] });
           if (count === 31) plan.boundary = 'decision-limit';
         }
       }
       return { status: 'ready', actor: prepared.actor, scope: prepared.scope,
-        modelId: c.modelId, legacySetup: c.legacySetup,
+        modelId: c.modelId, legacySetup: c.legacySetup, lanternAdjusted: c.featureCompat,
         model: result.model, source: result.source, method: 'policy-only',
         plan, uncertainties: prepared.uncertainties ?? [],
-        candidates: prepared.candidates.map((candidate, index) => ({ ...candidate, policyWeight: result.policy[index] }))
+        candidates: prepared.candidates.map((candidate, index) => ({ ...candidate, policyWeight: rootPolicy[index] }))
           .sort((a, b) => b.policyWeight - a.policyWeight) };
     } catch (error) {
       return { status: String(error.code ?? '').startsWith('BGA_') ? 'unsupported' : 'error',
@@ -145,7 +159,8 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
     const python = c.python ? path.resolve(root, c.python)
       : await fs.access(windowsPython).then(() => windowsPython).catch(() => unixPython);
     const child = spawn(python, [path.join(root, 'scripts/infer-live.py'), '--loop', c.loop,
-      '--generation', c.generation, '--stream', ...(c.legacySetup ? ['--allow-legacy-setup'] : [])],
+      '--generation', c.generation, '--stream', ...(c.legacySetup ? ['--allow-legacy-setup'] : []),
+      ...(c.featureCompat ? ['--allow-feature-compat'] : [])],
       { cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let output = '';
     let pending = null;

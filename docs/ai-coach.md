@@ -4,9 +4,9 @@
 
 从玩家昵称或链接到回放、已核对选牌决策与模型微调的入口见 [BGA训练工作流](bga-training-workflow.md)。目前真人数据只监督起始选牌策略，未接入完整放骰连锁或BGA对局价值标签。
 
-2026-11-12：开局改为红黑白各5块无放回分配，13块城堡、2块水井，每房间至少两色。`setupVersion=tile-inventory-v3` 绑定新数据与模型。旧r5已停止；新训练使用 `guide-r6` 和 `continuous-r6`，不载入旧权重续训。本地页可显式选择旧r4/r5作对照，执行当前规则并标记旧摆设训练；侧栏仍严格匹配当前版本。
+2026-11-13：灯笼牌背收益已展开到具体资源/印章/影响力，并计入候选策略；旧r6训练已停止。新训练使用 `guide-r7` 和 `continuous-r7`，不载入旧权重续训。`featureVersion=public-decisions-v3` 与 `setupVersion=tile-inventory-v3` 共同绑定新数据与模型。本地页可显式选择旧r4/r5/r6作对照，执行当前规则并标记旧摆设训练；侧栏仍严格匹配当前版本。
 
-每代选模评估额外用旧第117代冠军作为固定对手，在新摆色下交换座位对打。报告里的 `frozen.winRate` 是候选对旧模型的胜率，`championFrozen` 是当前冠军对旧模型的胜率。这只说明相对旧模型是否变强，不是正式保留测试集，也不作为晋级门槛。旧模型没有见过两格同色房间。
+r7 每代与攻略和同编码的当前冠军交换座位评估。此前 r6 额外对打的旧 r4 第117代冠军使用 v2 编码，与本次 v3 不兼容，因此 r7 的 `frozenOpponent` 设为 `null`。后续若增加固定对手，须使用同编码及匹配目录、启发式指纹的检查点；这些评估仅用于选模，不是最终保留测试集。
 
 按用户确认，继续以当前 `local-practice-v1` 为训练目标，不在这批改动中扩展正式摆设规则。卡牌数值仍由 JSON 配置管理；数据变化必须创建新的训练目录。训练变强和训练时间增长是两回事，本项目不承诺仅靠连续运行就达到强棋力。
 
@@ -31,7 +31,7 @@
 
 ```powershell
 # 新版编码的数据必须重新生成；命令拒绝覆盖已有输出。
-node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r6.jsonl.gz --prefix ai-guide-r6
+node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r7.jsonl.gz --prefix ai-guide-r7
 
 # 默认持续运行；不需要联网，也不需要打开网页。
 .\scripts\train-ai.ps1
@@ -51,7 +51,7 @@ node scripts/generate-training-data.mjs --games 128 --out .local/ai/guide-r6.jso
 
 `-Generations 0` 是持续模式；计算机休眠、关机时没有计算，重新执行命令才恢复。没有安装开机任务、系统服务或云计算作业。前台可用 Ctrl+C 请求停止；强制结束最多丢失正在执行但尚未写检查点的一局。预热中断会从头预热；选模评估中断会重做该份未完成报告。
 
-同一输出目录由系统文件锁保护，防止两个进程同时写模型。输出默认 `.local/ai/continuous-r6/`：
+同一输出目录由系统文件锁保护，防止两个进程同时写模型。输出默认 `.local/ai/continuous-r7/`：
 
 | 文件 | 用途 |
 |---|---|

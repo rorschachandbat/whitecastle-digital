@@ -116,7 +116,7 @@ test('AI v2 区分同层不同房间的家臣及放置骰点，不把公开不�
   env.match.state.castleDecks.diplomat.reverse();
   env.match.seed = 'private-seed-must-not-affect-network';
   assert.deepEqual(encodeState(env), fourth);
-  assert.equal(observation.featureVersion, 'public-decisions-v2');
+  assert.equal(observation.featureVersion, 'public-decisions-v3');
 });
 
 test('AI 存档分析从同一引擎恢复，拒绝其他配置的存档', () => {

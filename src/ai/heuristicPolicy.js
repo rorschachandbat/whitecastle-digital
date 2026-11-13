@@ -1,4 +1,5 @@
 import { cardOf, ROWS } from './features.js';
+import { expandLanternEffects, lanternBacks } from './lanternEffects.js';
 
 /** 攻略只提供可调整的软偏好，不改变规则或终局胜负。 */
 export function heuristicScore(env, option, weights) {
@@ -15,7 +16,11 @@ export function heuristicScore(env, option, weights) {
     const amount = player?.resources?.[type] ?? 0;
     return (stage[type] ?? weights.effect[type] ?? 0) * (amount >= 7 && ['food', 'iron', 'pearl'].includes(type) ? 0.1 : 1);
   };
-  const effects = (items = []) => items.reduce((sum, effect) => sum + asset(effect.type) * effect.amount, 0);
+  const backs = lanternBacks(match, player);
+  // 灯笼图标换成牌背具体收益；空灯笼区不再按固定占位分计价。
+  const effects = (items = []) => expandLanternEffects(items, backs)
+    .filter((effect) => effect.type !== 'lantern')
+    .reduce((sum, effect) => sum + asset(effect.type) * effect.amount, 0);
   const field = (item) => effects(item?.effects) - effects(item?.cost) * 0.6;
   let result = 0;
   if (typeof value === 'string') result += asset(value);

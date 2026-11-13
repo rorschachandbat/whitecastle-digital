@@ -1,9 +1,9 @@
 {
-  "input": ".local/ai/guide-r6.jsonl.gz",
+  "input": ".local/ai/guide-r7.jsonl.gz",
   "initialCheckpoint": null,
   "catalog": null,
   "weights": null,
-  "prefix": "ai-loop-r6",
+  "prefix": "ai-loop-r7",
   "epochs": 12,
   "gamesPerGeneration": 32,
   "evaluationPairs": 16,
@@ -13,5 +13,5 @@
   "historySize": 6,
   "threads": 2,
   "maxDiskGB": 4,
-  "frozenOpponent": ".local/ai/continuous-r4/generation-00117/candidate.pt"
+  "frozenOpponent": null
 }

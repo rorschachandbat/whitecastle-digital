@@ -1,7 +1,8 @@
 import { EFFECT_TYPES } from '../data/catalog.js';
 import { personalField } from '../engine/cardRules.js';
+import { expandLanternEffects, lanternBacks } from './lanternEffects.js';
 
-export const FEATURE_VERSION = 'public-decisions-v2';
+export const FEATURE_VERSION = 'public-decisions-v3';
 export const COLORS = ['coral', 'black', 'white'];
 export const ASSETS = ['food', 'iron', 'pearl', 'coin', 'seal', 'points'];
 export const ROWS = ['courtier', 'gardener', 'warrior'];
@@ -16,6 +17,8 @@ export const effectsOf = (effects = []) => EFFECT_TYPES.map((type) =>
 const costOf = (costs = []) => ASSETS.slice(0, 5).map((type) =>
   costs.filter((cost) => cost.type === type).reduce((sum, cost) => sum + cost.amount, 0) / 5);
 const fieldOf = (field) => [...costOf(field?.cost), ...effectsOf(field?.effects)];
+const rewardEffects = (env, effects, player) => env?.lanternExpansion === false ? (effects ?? [])
+  : expandLanternEffects(effects, lanternBacks(env.match, player));
 
 function encodePlayer(match, player) {
   const resources = ASSETS.map((key) => (player?.resources?.[key] ?? 0) / (key === 'points' ? 50 : 7));
@@ -79,7 +82,9 @@ export function encodeState(env) {
     for (const row of ROWS) values.push(state?.placements?.[`personal:${owner}:${row}`]?.dice?.length ?? 0);
   }
   for (const side of ['left', 'right']) values.push(state?.placements?.[`outside:${side}`]?.dice?.length ?? 0);
-  values.push(...fieldOf(probe?.request?.field), ...effectsOf(probe?.request?.effects));
+  values.push(...costOf(probe?.request?.field?.cost),
+    ...effectsOf(rewardEffects(env, probe?.request?.field?.effects, player)),
+    ...effectsOf(rewardEffects(env, probe?.request?.effects, player)));
   const top = cardOf(match, state?.topCardId ?? match.config.setup.topCardId);
   for (let index = 0; index < 3; index += 1) {
     const field = top?.fields[index];
@@ -107,7 +112,7 @@ export function encodeState(env) {
     for (const rowId of ROWS) {
       const row = match.config.personalDomainRows.find((item) => item.id === rowId);
       const count = person?.figures?.[row?.figureType]?.length ?? 0;
-      values.push(...effectsOf(person ? [row.baseGain, ...row.revealedGains.slice(0, count)] : []));
+      values.push(...effectsOf(rewardEffects(env, person ? [row.baseGain, ...row.revealedGains.slice(0, count)] : [], person)));
     }
     for (const garden of match.config.setup.gardens) {
       values.push(Number(Boolean(match.roundGardens?.remaining?.[owner]?.includes(garden.cardId))));
@@ -138,7 +143,7 @@ export function encodeState(env) {
     (state?.castleDecks?.diplomat?.length ?? match.config.setup.castleDecks.diplomat.length) / 9,
     ...oneHot(ROOMS, env.pending?.target?.id));
   for (let index = 0; index < 20; index += 1) {
-    values.push(...effectsOf(probe?.request?.effects?.[index] ? [probe.request.effects[index]] : []),
+    values.push(...effectsOf(rewardEffects(env, probe?.request?.effects?.[index] ? [probe.request.effects[index]] : [], player)),
       Number((env.orderPrefix ?? []).includes(index)));
   }
   for (let index = 0; index < 3; index += 1) {
@@ -201,10 +206,14 @@ export function encodeOption(env, option) {
     (action?.amount ?? object.amount ?? 0) / 2, (garden?.foodCost ?? 0) / 5, (garden?.victoryPoints ?? 0) / 10,
     yard ? (match.config.trainingZones.find((zone) => zone.id === yard.id)?.ironCost ?? 0) / 5 : 0,
     ...costOf(fields.flatMap((field) => field?.cost ?? [])),
-    ...effectsOf([...fields.flatMap((field) => field?.effects ?? []), ...orderedEffects]),
-    ...[0, 1].flatMap((index) => effectsOf(
+    ...effectsOf(rewardEffects(env, [
+      ...(action?.side === 'left' && env.lanternExpansion !== false ? [{ type: 'lantern', amount: 1 }] : []),
+      ...fields.flatMap((field) => field?.effects ?? []), ...orderedEffects,
+    ], probe?.request?.player ?? match.state?.players?.[env.actor])),
+    ...[0, 1].flatMap((index) => effectsOf(rewardEffects(env,
       object.faceOrder ? match.config.yardFaces.find((face) => face.id === object.faceOrder[index])?.effects
-        : object.fieldIds ? card?.fields.find((field) => field.id === object.fieldIds[index])?.effects : [])),
+        : object.fieldIds ? card?.fields.find((field) => field.id === object.fieldIds[index])?.effects : [],
+      probe?.request?.player ?? match.state?.players?.[env.actor]))),
     ...Array.from({ length: 3 }, (_, index) =>
       ((probe?.request?.fields ?? []).findIndex((field) => field.id === object.fieldIds?.[index]) + 1) / 3),
     ...match.config.setup.gardens.map((item) => Number(item.cardId === (action?.cardId ?? object.cardId))),

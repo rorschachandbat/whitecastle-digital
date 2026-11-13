@@ -31,6 +31,10 @@ r8 每代与攻略和同编码的当前冠军交换座位评估；双方神经�
 
 ## 如何一直运行
 
+双击仓库根目录的 `查看AI训练日志.cmd`，即可打开每2秒刷新的独立查看窗口，显示累计平均/最高分、60/80分比例、最近10条训练记录及错误日志。关闭窗口或按 Ctrl+C 只退出查看；每局结束后分数才更新，无需重启训练或构建。
+
+命令行也可运行 `node scripts/watch-ai.mjs --once` 查看一次，或加 `--raw` 查看原始JSON日志。默认目录读取当前副本 `data/bga-live-ai.json`；可用 `--directory`、`--log`、`--error-log` 覆盖文件位置，`--interval` 设置1–60秒刷新间隔。启动器与 `scripts/watch-ai.mjs`、`src/ui/StringTable.js`、`data/bga-live-ai.json` 必须按仓库布局一起复制，另需Node环境和该副本本机训练输出；不依赖盘符、分支名或构建目录。
+
 从仓库根目录运行；需要已有 `.local/ai-venv`、Node及配套脚本，无须构建：
 
 ```powershell

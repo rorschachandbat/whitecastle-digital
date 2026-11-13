@@ -30,7 +30,7 @@ function Invoke-RestMethod {
   }
   $extension = Join-Path $global:projectRoot 'browser-extension/bga-live'
   if ($global:scenario.other -contains $port) { $extension = 'other-worktree' }
-  $version = if ($global:scenario.old -contains $port) { 4 } else { 5 }
+  $version = if ($global:scenario.old -contains $port) { 5 } else { 6 }
   return @{ extensionPath = $extension; adviceVersion = $version }
 }
 function Start-Process {

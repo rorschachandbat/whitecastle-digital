@@ -153,6 +153,51 @@ test('本机冠军实际推理能返回同编码候选的策略排序', {
     tested: 'synthetic-opening-position', bestColumn: result.candidates[0].column }));
 });
 
+test('侧栏按所选版本固定冠军，旧摆设与初始权重可对照，其他编码不匹配仍拒绝', async (t) => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'whitecastle-live-models-'));
+  t.after(() => fs.rmSync(temporaryRoot, { recursive: true }));
+  fs.mkdirSync(path.join(temporaryRoot, 'data'));
+  for (const name of ['whitecastle-2p.json', 'ai-heuristic.json', 'bga-mapping.json']) {
+    fs.copyFileSync(new URL(`../data/${name}`, import.meta.url), path.join(temporaryRoot, 'data', name));
+  }
+  fs.writeFileSync(path.join(temporaryRoot, 'data/bga-live-ai.json'), JSON.stringify({
+    loopDirectory: '.local/ai/continuous-r6', python: 'python-stub',
+  }));
+  fs.writeFileSync(path.join(temporaryRoot, 'python-stub'), '');
+  for (const [id, generation] of [['r4', 'generation-00117'], ['r6', 'initial']]) {
+    const loop = path.join(temporaryRoot, '.local/ai', `continuous-${id}`);
+    const checkpoint = path.join(loop, generation, generation === 'initial' ? 'imitation.pt' : 'candidate.pt');
+    fs.mkdirSync(path.dirname(checkpoint), { recursive: true });
+    fs.writeFileSync(checkpoint, '');
+    fs.writeFileSync(path.join(loop, 'loop-state.json'), JSON.stringify({
+      meta: { ...config.meta, ...(id === 'r4' ? { setupVersion: 'old-setup' } : {}) },
+      champion: checkpoint, generation: 1, updatedAt: 0,
+    }));
+  }
+  const calls = [];
+  const ai = createLiveAi({ root: temporaryRoot, inferModel: async (observation, c) => {
+    calls.push([c.modelId, c.generation, c.legacySetup]);
+    return { source: 'continuous-champion', model: c.generation, policy: observation.candidates.map(() => 1 / observation.candidates.length) };
+  } });
+  const listing = await ai.models();
+  assert.equal(listing.selectedModel, 'r6');
+  assert.ok(listing.models.every((model) => model.status === 'available'));
+  const old = await ai.analyze(fixture(), { modelId: 'r4' });
+  const initial = await ai.analyze(fixture(), { modelId: 'r6' });
+  assert.equal(old.status, 'ready');
+  assert.equal(old.modelId, 'r4');
+  assert.equal(old.legacySetup, true);
+  assert.equal(initial.status, 'ready');
+  assert.equal(initial.model, 'initial');
+  assert.deepEqual(calls, [['r4', 'generation-00117', true], ['r6', 'initial', false]]);
+  const stateFile = path.join(temporaryRoot, '.local/ai/continuous-r4/loop-state.json');
+  const state = JSON.parse(fs.readFileSync(stateFile));
+  state.meta.encoderHash = 'incompatible';
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  assert.equal((await ai.analyze(fixture(), { modelId: 'r4' })).code, 'AI_MODEL_CONFIG_MISMATCH');
+  assert.equal((await ai.analyze(fixture(), { modelId: '../r4' })).code, 'AI_MODEL_INVALID');
+});
+
 function playingFixture() {
   const opening = fixture();
   opening.changedAt = '2026-11-12T01:00:00Z';

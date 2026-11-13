@@ -22,6 +22,13 @@ dashboard.append(el('p', text('live.empty'), 'empty'));
 const advice = el('section', undefined, 'panel advice');
 advice.append(el('h2', text('live.next')), el('p', text('live.nextDescription')));
 const training = el('section', undefined, 'panel');
+const modelControls = el('section', undefined, 'panel');
+const modelLabel = el('label', text('live.modelLabel'));
+const modelSelect = el('select');
+modelSelect.setAttribute('aria-label', text('live.modelLabel'));
+modelLabel.append(modelSelect);
+const modelStatus = el('p', '', 'muted');
+modelControls.append(modelLabel, modelStatus);
 const snapshotControls = el('section', undefined, 'panel');
 const snapshotLabel = el('label', text('live.snapshotImport'));
 const snapshotFile = el('input');
@@ -30,7 +37,7 @@ snapshotFile.accept = '.json,application/json';
 snapshotLabel.append(snapshotFile);
 const returnLive = el('button', text('live.returnLive'));
 snapshotControls.append(snapshotLabel, returnLive);
-root.append(heading, status, meta, setup, snapshotControls, training, advice, dashboard);
+root.append(heading, status, meta, setup, snapshotControls, modelControls, training, advice, dashboard);
 let current = null;
 let rendered = null;
 let supported = null;
@@ -39,6 +46,59 @@ let checkedTraining = 0;
 let pairToken = null;
 let importedSnapshot = null;
 let importing = false;
+const MODEL_KEY = 'whitecastle.bga.model.v1';
+const generationName = (value) => !value ? text('live.unknown') : value === 'initial' ? text('live.modelInitial')
+  : text('live.modelGeneration', { generation: Number(String(value).replace('generation-', '')) });
+async function refreshModels() {
+  if (adviceVersion < 6) {
+    modelSelect.disabled = true;
+    modelStatus.textContent = text('live.restart');
+    return;
+  }
+  const response = await fetch('/api/live/models');
+  if (!response.ok) throw new Error('AI_NOT_AVAILABLE');
+  const value = await response.json();
+  modelSelect.replaceChildren();
+  for (const model of value.models) {
+    const option = el('option', text('live.modelOption', {
+      model: model.modelId, generation: generationName(model.generation),
+      state: text(model.status !== 'available' ? 'live.modelUnavailable'
+        : model.legacySetup ? 'live.modelLegacy' : 'live.modelAvailable'),
+    }));
+    option.value = model.modelId;
+    option.disabled = model.status !== 'available';
+    option.selected = model.modelId === value.selectedModel;
+    modelSelect.append(option);
+  }
+  modelSelect.value = value.selectedModel;
+  modelStatus.textContent = text('live.modelHint');
+}
+async function selectModel(modelId) {
+  modelSelect.disabled = true;
+  modelStatus.textContent = text('live.modelSwitching');
+  try {
+    const response = await fetch('/api/live/model', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pairToken}` },
+      body: JSON.stringify({ modelId }),
+    });
+    if (!response.ok) throw new Error('AI_NOT_AVAILABLE');
+    try { localStorage.setItem(MODEL_KEY, modelId); } catch {}
+    if (importedSnapshot) {
+      importedSnapshot = (await (await fetch('/api/live/snapshot')).json()).latest;
+      render(importedSnapshot);
+    }
+    checkedTraining = 0;
+    await refresh();
+    modelStatus.textContent = text('live.modelHint');
+  } catch {
+    try { await refreshModels(); } catch {}
+    modelStatus.textContent = text('live.modelFailed');
+  }
+  finally {
+    modelSelect.disabled = false;
+  }
+}
+modelSelect.onchange = () => selectModel(modelSelect.value);
 snapshotFile.onchange = async () => {
   const file = snapshotFile.files[0];
   if (!file) return;
@@ -98,6 +158,9 @@ const adviceErrors = {
   AI_MODEL_CONFIG_MISMATCH: 'live.adviceMismatch',
   AI_PYTHON_UNAVAILABLE: 'live.advicePython',
   AI_INFERENCE_TIMEOUT: 'live.adviceTimeout',
+  AI_CHAMPION_INVALID: 'live.modelMissing',
+  AI_NOT_AVAILABLE: 'live.modelMissing',
+  AI_INVALID_POLICY: 'live.modelInvalidPolicy',
 };
 function chainText(choice) {
   const effect = (value) => text('live.effect', { amount: value.amount, effect: text(`editor.effect.${value.type}`) });
@@ -140,12 +203,14 @@ function renderAdvice(latest, connected) {
   if (!result || result.status === 'pending') { advice.append(el('p', text('live.advicePending'))); return; }
   if (result.status !== 'ready') {
     advice.append(el('p', text(adviceErrors[result.code] ?? 'live.adviceError')),
+      el('p', text('live.adviceCode', { code: result.code ?? 'AI_INFERENCE_FAILED' }), 'muted'),
       el('p', text('live.adviceBoundary'), 'muted'));
     return;
   }
   const name = latest.observation.players.find((player) => player.id === result.actor)?.name ?? result.actor;
   advice.append(el('p', text('live.adviceActor', { name }), 'action'),
-    el('p', text('live.adviceModel', { generation: Number(result.model.replace('generation-', '')) }), 'muted'));
+    el('p', text('live.selectedAdviceModel', { model: result.modelId ?? '—', generation: generationName(result.model) }), 'muted'));
+  if (result.legacySetup) advice.append(el('p', text('live.modelLegacyHint'), 'muted'));
   const effect = (gain) => text('live.effect', { amount: gain.amount, effect: text(`editor.effect.${gain.type}`) });
   const candidates = el('ol', undefined, 'candidates');
   for (const candidate of result.candidates.slice(0, result.scope === 'placement-root-only' ? 5 : undefined)) {
@@ -213,7 +278,7 @@ async function refreshTraining() {
     }
     training.append(el('p', text('live.trainingProgress', { generation: value.generation,
       games: value.completedSelfplayGames, phase: text(phaseKeys[value.phase] ?? 'live.phase.other') })),
-    el('p', text('live.trainingChampion', { generation: Number(value.champion?.replace('generation-', '')),
+    el('p', text('live.selectedChampion', { model: value.modelId ?? '—', generation: generationName(value.champion),
       state: text(value.running ? 'live.trainingRunning' : 'live.trainingIdle') })));
     if (value.guideEvaluation) training.append(el('p', text('live.trainingEvaluation', {
       wins: value.guideEvaluation.wins, games: value.guideEvaluation.games,
@@ -316,6 +381,11 @@ try {
   supported = config.assetVersion;
   adviceVersion = config.adviceVersion;
   pairToken = config.token;
+  await refreshModels();
+  let savedModel;
+  try { savedModel = localStorage.getItem(MODEL_KEY); } catch {}
+  if (adviceVersion >= 6 && savedModel && savedModel !== modelSelect.value
+    && [...modelSelect.options].some((item) => item.value === savedModel && !item.disabled)) await selectModel(savedModel);
   if (adviceVersion >= 3) {
     const saved = await fetch('/api/live/snapshot');
     if (saved.ok) {

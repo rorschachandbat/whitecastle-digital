@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { once } from 'node:events';
 import { sanitizeLiveCapture, mapLiveCapture } from '../src/integrations/bgaLive.js';
 import { createLiveServer } from '../scripts/serve-bga-live.mjs';
+import { text, StringTable } from '../src/ui/StringTable.js';
 
 const catalog = JSON.parse(fs.readFileSync(new URL('../data/whitecastle-2p.json', import.meta.url)));
 const mapping = JSON.parse(fs.readFileSync(new URL('../data/bga-mapping.json', import.meta.url)));
@@ -19,6 +20,106 @@ const capture = () => ({
     })),
     cards: [], pieces: [], tiles: [], dice: [], decks: [], logs: [{ cookie: 'not-collected' }],
   },
+});
+
+test('侧栏模型选择显示可用性，切换后使用配对请求并记住浏览器选择', async () => {
+  class Node {
+    constructor(tag) { this.tag = tag; this.children = []; this.value = ''; this.dataset = {}; }
+    append(...nodes) { this.children.push(...nodes); }
+    replaceChildren(...nodes) { this.children = nodes; }
+    setAttribute() {}
+    get options() { return this.children; }
+  }
+  const root = new Node('main');
+  const calls = [];
+  const stored = new Map();
+  const models = { selectedModel: 'r6', models: [
+    { modelId: 'r6', generation: 'generation-00045', status: 'available' },
+    { modelId: 'r4', generation: 'generation-00117', legacySetup: true, status: 'available' },
+    { modelId: 'r9', status: 'unavailable' },
+  ] };
+  const source = fs.readFileSync(new URL('../src/ui/bgaLive.js', import.meta.url), 'utf8')
+    .replace("import { text, StringTable } from './StringTable.js';", '');
+  const ui = await vm.runInNewContext(`(async () => { ${source}\n return {modelSelect,modelStatus}; })()`, {
+    text, StringTable, Date, location: { origin: 'http://127.0.0.1:4180' },
+    document: { querySelector: () => root, createElement: (tag) => new Node(tag) },
+    localStorage: { getItem: (key) => stored.get(key), setItem: (key, value) => stored.set(key, value) },
+    setInterval() {},
+    fetch: async (url, options) => {
+      calls.push([url, options]);
+      const value = url.endsWith('/config') ? { adviceVersion: 6, token: 'test-token', assetVersion: 'test', extensionPath: 'test' }
+        : url.endsWith('/models') ? models : url.endsWith('/model') ? models
+          : url.endsWith('/snapshot') ? { latest: null } : url.endsWith('/training') ? { status: 'unavailable' }
+            : { watch: null, latest: null, updates: 0 };
+      return { ok: true, json: async () => value };
+    },
+  });
+  assert.equal(ui.modelSelect.value, 'r6');
+  assert.ok(ui.modelSelect.children[1].textContent.includes(text('live.modelLegacy')));
+  assert.equal(ui.modelSelect.children[2].disabled, true);
+  ui.modelSelect.value = 'r4';
+  await ui.modelSelect.onchange();
+  const request = calls.find(([url]) => url.endsWith('/model'));
+  assert.equal(request[1].headers.Authorization, 'Bearer test-token');
+  assert.deepEqual(JSON.parse(request[1].body), { modelId: 'r4' });
+  assert.equal([...stored.values()][0], 'r4');
+  assert.equal(ui.modelSelect.disabled, false);
+  assert.equal(ui.modelStatus.textContent, text('live.modelHint'));
+});
+
+test('切换模型需本机配对，只重算当前观察，旧模型异步结果不能覆盖新模型', async (t) => {
+  const token = 'c'.repeat(48);
+  let finishOld;
+  let oldStarted;
+  const started = new Promise((resolve) => { oldStarted = resolve; });
+  const calls = [];
+  const ai = {
+    models: async (id = 'r6') => ({ selectedModel: id, status: id === 'r9' ? 'unavailable' : 'available',
+      models: ['r6', 'r4'].map((modelId) => ({ modelId, status: 'available' })) }),
+    trainingStatus: async (id) => ({ modelId: id, status: 'available' }),
+    analyze: async (_, { modelId }) => {
+      calls.push(modelId ?? 'r6');
+      if (calls.length === 1) {
+        oldStarted();
+        return new Promise((resolve) => { finishOld = resolve; });
+      }
+      return { status: 'ready', modelId };
+    },
+  };
+  const server = await createLiveServer({ catalog, mapping, token, ai });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (route, body, headers = {}) => fetch(`${origin}/api/live/${route}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...headers },
+    body: JSON.stringify(body),
+  });
+  assert.equal((await post('model', { modelId: 'r4' }, { Authorization: 'wrong' })).status, 401);
+  assert.equal((await post('model', { modelId: 'r4' }, { Origin: `chrome-extension://${'a'.repeat(32)}` })).status, 403);
+  assert.equal((await post('model', { modelId: '../r4' })).status, 400);
+  assert.equal((await post('model', { modelId: 'r9' })).status, 400);
+  await post('connect', { watchId, table: '123' });
+  await post('capture', capture());
+  await started;
+  assert.equal((await post('model', { modelId: 'r4' })).status, 200);
+  assert.equal((await (await fetch(`${origin}/api/live/models`)).json()).selectedModel, 'r4');
+  finishOld({ status: 'ready', modelId: 'r6' });
+  let state;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    state = await (await fetch(`${origin}/api/live/state`)).json();
+    if (state.latest.recommendations.modelId === 'r4') break;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(state.latest.recommendations.modelId, 'r4');
+  assert.deepEqual(calls, ['r6', 'r4']);
+  assert.equal(state.updates, 1);
+  assert.equal((await (await fetch(`${origin}/api/live/training`)).json()).modelId, 'r4');
+  const payload = { format: 'whitecastle-bga-live-snapshot', version: 1, receivedAt: '2026-11-11T00:00:00Z', ...capture() };
+  assert.equal((await post('analyze-snapshot', payload)).status, 200);
+  await post('model', { modelId: 'r6' });
+  const snapshot = await (await fetch(`${origin}/api/live/snapshot`)).json();
+  assert.equal(snapshot.latest.recommendations.modelId, 'r6');
 });
 
 test('历史快照重新清洗映射并独立分析，不伪造实时心跳，不信任导出中附带的建议', async (t) => {

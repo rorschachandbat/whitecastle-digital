@@ -5,22 +5,27 @@ import { prepareLiveAdvice } from '../src/integrations/bgaLiveAdvice.js';
 import { preparePlayingAdvice, rememberLiveContext, getPlayingSession, publicObservations } from '../src/integrations/bgaLivePlaying.js';
 import { prepareChainAdvice, describeLiveChoice, advancePublic } from '../src/integrations/bgaLiveChain.js';
 import { loadTrainingConfig, projectRoot } from './ai-common.mjs';
+import { createPlayAi, championGeneration } from './play-ai.mjs';
 
 const read = async (file) => JSON.parse(await fs.readFile(file, 'utf8'));
 const modelLabel = (value) => String(value ?? '').replaceAll('\\', '/').split('/').at(-2) ?? null;
 const sameMeta = (a, b) => Object.keys(b).every((key) => a?.[key] === b[key]);
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 
-/** 配置和权重都相对当前副本；实时分析只使用持续训练冠军，不切换到选牌微调权重。 */
+/** 配置和权重都相对当前副本；按用户选择读取持续训练冠军。 */
 export function createLiveAi({ root = projectRoot, inferModel } = {}) {
   let settings;
   let parameters;
+  const registry = createPlayAi({ root });
   const contexts = new Map();
   let contextQueue = Promise.resolve();
-  const config = async () => {
+  const config = async (modelId) => {
     settings ??= await read(path.join(root, 'data/bga-live-ai.json'));
     parameters ??= loadTrainingConfig(path.join(root, 'data/whitecastle-2p.json'), path.join(root, 'data/ai-heuristic.json'));
-    return { ...settings, loop: path.resolve(root, settings.loopDirectory), ...parameters };
+    if (modelId !== undefined && !/^r\d+$/.test(modelId)) fail('AI_MODEL_INVALID');
+    return { ...settings, loop: modelId === undefined ? path.resolve(root, settings.loopDirectory)
+      : path.join(root, '.local/ai', `continuous-${modelId}`),
+    modelId: modelId ?? path.basename(settings.loopDirectory).replace(/^continuous-/, ''), ...parameters };
   };
   const observe = (latest) => {
     const task = contextQueue.then(() => observeContext(latest));
@@ -49,9 +54,12 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
     }
     return { ...c, mapping, context: applicable };
   }
-  async function trainingStatus() {
+  async function models(modelId) {
+    return registry.status(undefined, modelId);
+  }
+  async function trainingStatus(modelId) {
     try {
-      const { loop, meta } = await config();
+      const { loop, meta, modelId: selectedModel } = await config(modelId);
       const state = await read(path.join(loop, 'loop-state.json'));
       let running = false;
       try { process.kill(state.pid, 0); running = Date.now() / 1000 - state.updatedAt < 600; } catch {}
@@ -60,18 +68,20 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
       if (/^generation-\d+$/.test(champion ?? '')) {
         try { summary = (await read(path.join(loop, champion, 'evaluation.json'))).summary?.guide ?? null; } catch {}
       }
-      return { status: sameMeta(state.meta, meta) ? 'available' : 'incompatible',
+      const expected = Object.fromEntries(Object.entries(meta).filter(([key]) => key !== 'setupVersion'));
+      return { status: sameMeta(state.meta, expected) ? 'available' : 'incompatible', modelId: selectedModel,
+        legacySetup: state.meta?.setupVersion !== meta.setupVersion,
         profile: state.meta?.profile, running, generation: state.generation, phase: state.phase,
         completedSelfplayGames: state.completedSelfplayGames, champion, latest: modelLabel(state.latest),
         updatedAt: state.updatedAt, guideEvaluation: summary && { wins: summary.wins, games: summary.games,
           averageMargin: summary.averageMargin }, modelSource: 'continuous-champion' };
     } catch { return { status: 'unavailable', modelSource: 'continuous-champion' }; }
   }
-  async function analyze(latest) {
+  async function analyze(latest, { modelId } = {}) {
     let prepared;
     let worker;
     try {
-      const c = await observe(latest);
+      const c = { ...await observe(latest), ...await config(modelId) };
       try { prepared = prepareLiveAdvice(latest, c); }
       catch (error) {
         if (error.code !== 'BGA_ADVICE_PHASE') throw error;
@@ -82,15 +92,21 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
         }
       }
       const state = await read(path.join(c.loop, 'loop-state.json'));
-      if (!sameMeta(state.meta, c.meta)) fail('AI_MODEL_CONFIG_MISMATCH');
+      const legacySetup = state.meta?.setupVersion !== c.meta.setupVersion;
+      const expected = Object.fromEntries(Object.entries(c.meta).filter(([key]) => key !== 'setupVersion'));
+      if (!sameMeta(state.meta, expected)) fail('AI_MODEL_CONFIG_MISMATCH');
+      c.generation = championGeneration(state.champion);
+      c.legacySetup = legacySetup;
+      if (!c.generation) fail('AI_CHAMPION_INVALID');
       worker = inferModel ? null : await inferenceSession(c);
       const infer = async (observation, observations) => {
         const result = inferModel ? await inferModel(observation, c)
           : await worker.infer({ meta: c.meta, observation, observations });
-        if (result.source !== 'continuous-champion' || !/^generation-\d+$/.test(result.model)
+        if (result.source !== 'continuous-champion' || !(result.model === 'initial' || /^generation-\d+$/.test(result.model))
         || result.policy?.length !== observation.candidates.length
         || result.policy.some((value) => !Number.isFinite(value) || value < 0 || value > 1)
         || Math.abs(result.policy.reduce((sum, value) => sum + value, 0) - 1) > 0.0001) fail('AI_INVALID_POLICY');
+        if (result.model !== c.generation) fail('AI_CHAMPION_CHANGED');
         return result;
       };
       const result = await infer(prepared.observation, prepared.observations);
@@ -113,6 +129,7 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
         }
       }
       return { status: 'ready', actor: prepared.actor, scope: prepared.scope,
+        modelId: c.modelId, legacySetup: c.legacySetup,
         model: result.model, source: result.source, method: 'policy-only',
         plan, uncertainties: prepared.uncertainties ?? [],
         candidates: prepared.candidates.map((candidate, index) => ({ ...candidate, policyWeight: result.policy[index] }))
@@ -127,7 +144,8 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
     const unixPython = path.join(root, '.local/ai-venv/bin/python');
     const python = c.python ? path.resolve(root, c.python)
       : await fs.access(windowsPython).then(() => windowsPython).catch(() => unixPython);
-    const child = spawn(python, [path.join(root, 'scripts/infer-live.py'), '--loop', c.loop, '--stream'],
+    const child = spawn(python, [path.join(root, 'scripts/infer-live.py'), '--loop', c.loop,
+      '--generation', c.generation, '--stream', ...(c.legacySetup ? ['--allow-legacy-setup'] : [])],
       { cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let output = '';
     let pending = null;
@@ -170,5 +188,5 @@ export function createLiveAi({ root = projectRoot, inferModel } = {}) {
       close: () => { clearTimeout(timer); child.stdin.end(); },
     };
   }
-  return { analyze, observe, trainingStatus };
+  return { analyze, observe, trainingStatus, models };
 }

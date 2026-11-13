@@ -23,7 +23,7 @@ for ($portAttempt = 0; $portAttempt -lt 10; $portAttempt++) {
             $probe = Invoke-RestMethod -Uri "$candidateAddress/api/live/state" -TimeoutSec 2
             $config = Invoke-RestMethod -Uri "$candidateAddress/api/live/config" -TimeoutSec 2
             $running = $probe.format -eq 'whitecastle-bga-live-status' -and $probe.workspaceRoot -eq $projectRoot `
-                -and $config.extensionPath -eq $expectedExtension -and $config.adviceVersion -eq 5
+                -and $config.extensionPath -eq $expectedExtension -and $config.adviceVersion -eq 6
         } catch { $running = $false }
         if ($running) {
             $Port = $candidatePort

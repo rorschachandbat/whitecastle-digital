@@ -40,17 +40,21 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
   let training = null;
   let trainingCheckedAt = 0;
   let importedSnapshot = null;
+  let selectedModel;
+  let modelRevision = 0;
   const analyzeNext = async () => {
     if (analyzing || !queued) return;
     analyzing = true;
     const job = queued;
     queued = null;
     try {
-      const result = await ai.analyze(job.latest);
+      const result = await ai.analyze(job.latest, { modelId: job.modelId });
       if (watch?.active && watch.id === job.watchId && latest === job.latest
+        && job.revision === modelRevision
         && Date.now() - Date.parse(watch.receivedAt) <= 6000) latest.recommendations = result;
     } catch {
       if (watch?.active && watch.id === job.watchId && latest === job.latest
+        && job.revision === modelRevision
         && Date.now() - Date.parse(watch.receivedAt) <= 6000) {
         latest.recommendations = { status: 'error', code: 'AI_INFERENCE_FAILED' };
       }
@@ -81,7 +85,7 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
       }
       if (url.pathname === '/api/live/config' && request.method === 'GET') {
         return json(200, { token, extensionPath: path.join(root, 'browser-extension/bga-live'),
-          assetVersion: mapping.gameAssetVersion, adviceVersion: 5 });
+          assetVersion: mapping.gameAssetVersion, adviceVersion: 6 });
       }
       if (url.pathname === '/api/live/state' && request.method === 'GET') {
         return json(200, { format: 'whitecastle-bga-live-status', workspaceRoot: root,
@@ -90,9 +94,37 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
       if (url.pathname === '/api/live/snapshot' && request.method === 'GET') {
         return json(200, { latest: importedSnapshot });
       }
+      if (url.pathname === '/api/live/models' && request.method === 'GET') {
+        return json(200, await ai.models(selectedModel));
+      }
+      if (url.pathname === '/api/live/model' && request.method === 'POST') {
+        if (extension) fail('BGA_LIVE_ORIGIN_REJECTED', 403);
+        const supplied = Buffer.from(request.headers.authorization ?? '');
+        const expected = Buffer.from(`Bearer ${token}`);
+        if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) fail('BGA_LIVE_PAIR_REQUIRED', 401);
+        const data = await bodyOf(request);
+        if (!/^r\d+$/.test(data.modelId ?? '')) fail('AI_MODEL_INVALID');
+        const availability = await ai.models(data.modelId);
+        if (availability.status !== 'available') fail(availability.code ?? 'AI_NOT_AVAILABLE');
+        selectedModel = data.modelId;
+        const revision = ++modelRevision;
+        training = null;
+        if (latest) latest.recommendations = { status: 'pending' };
+        if (latest && watch?.active) {
+          queued = { latest, watchId: watch.id, modelId: selectedModel, revision };
+          void analyzeNext();
+        }
+        if (importedSnapshot) {
+          const snapshot = importedSnapshot;
+          snapshot.recommendations = { status: 'pending' };
+          const result = await ai.analyze(snapshot, { modelId: selectedModel });
+          if (importedSnapshot === snapshot && revision === modelRevision) snapshot.recommendations = result;
+        }
+        return json(200, availability);
+      }
       if (url.pathname === '/api/live/training' && request.method === 'GET') {
         if (!training || Date.now() - trainingCheckedAt > 10_000) {
-          training = await ai.trainingStatus();
+          training = await ai.trainingStatus(selectedModel);
           trainingCheckedAt = Date.now();
         }
         return json(200, training);
@@ -111,7 +143,9 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
         // 导出文件中的映射和建议都重新计算，不信任附带的引擎状态或训练标志。
         const imported = { source: capture.source, observation: capture.observation,
           ...mapLiveCapture(capture, catalog, mapping), changedAt: data.receivedAt, trainingEligible: false };
-        imported.recommendations = await ai.analyze(imported);
+        const revision = modelRevision;
+        imported.recommendations = await ai.analyze(imported, { modelId: selectedModel });
+        if (revision !== modelRevision) fail('AI_MODEL_CHANGED', 409);
         importedSnapshot = imported;
         return json(200, { mode: 'snapshot', latest: imported });
       }
@@ -152,11 +186,11 @@ export async function createLiveServer({ catalog, mapping, token = randomBytes(2
               // 先保留每次公开选牌事实，再合并耗时推理任务，避免快速操作丢失开局上下文。
               try { await ai.observe?.(observed); } catch {}
               if (watch?.active && watch.id === observedWatch && latest === observed) {
-                queued = { latest: observed, watchId: observedWatch };
+                queued = { latest: observed, watchId: observedWatch, modelId: selectedModel, revision: modelRevision };
                 void analyzeNext();
               }
             } else if (latest?.recommendations?.status === 'pending' && !analyzing && !queued) {
-              queued = { latest, watchId: watch.id };
+              queued = { latest, watchId: watch.id, modelId: selectedModel, revision: modelRevision };
               void analyzeNext();
             }
           }

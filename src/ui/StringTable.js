@@ -6,7 +6,7 @@ export const StringTable = Object.freeze({
   'trainingLog.hundred': '≥100分：{hundred}%',
   'trainingLog.parts': '平均分项：即时{points} · 钱印{coinAndSeal} · 资源{resources} · 家臣{courtier} · 武士{warrior} · 园丁{gardener} · 时间{time}',
   'trainingLog.targetComplete': '已完成本次有限目标',
-  'trainingLog.search': '搜索{seconds}秒 · 失败{failed} · 未完成连锁{unfinished} · 价值误差{valueMSE} · 分项误差{partsMSE}',
+  'trainingLog.search': '搜索{seconds}秒 · {workers}工作线程 · {rate}节点/秒 · 失败{failed} · 未完成连锁{unfinished} · 价值误差{valueMSE} · 分项误差{partsMSE}',
   'trainingLog.updated': '最近保存训练状态：{time}（分数在完整对局结束后更新）',
   'trainingLog.noScores': '尚无完整训练成绩，等待第一局结束。',
   'trainingLog.waiting': '尚未读到训练状态，等待训练写入。',

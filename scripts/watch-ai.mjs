@@ -123,6 +123,7 @@ async function render() {
         seconds: number(row.search.seconds, 1), failed: row.search.failed ?? 0,
         unfinished: row.search.unfinished ?? 0,
         valueMSE: number(row.valueMSE, 4), partsMSE: number(row.partsMSE, 4),
+        workers: row.search.workers ?? 1, rate: number(row.search.nodesPerSecond, 1),
       }));
     }
   }

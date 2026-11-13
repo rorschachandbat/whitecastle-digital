@@ -3,7 +3,9 @@ param(
     [string]$Action = 'Start',
     [string]$Config = '',
     [string]$OutputDirectory = '',
-    [int]$Generations = 0
+    [int]$Generations = 0,
+    [ValidateSet('auto', '1', '2', '3', '4', '5', '6', '7', '8')]
+    [string]$SearchWorkers = 'auto'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,7 +47,7 @@ if ($Generations -lt 0) { throw 'AI_BAD_GENERATIONS' }
 if (Test-Path -LiteralPath $taskStop) { Remove-Item -LiteralPath $taskStop }
 Push-Location $taskRoot
 try {
-    & $taskPython $taskLoop --config $Config --out-dir $OutputDirectory --generations $Generations
+    & $taskPython $taskLoop --config $Config --out-dir $OutputDirectory --generations $Generations --search-workers $SearchWorkers
     if ($LASTEXITCODE -ne 0) { throw "AI_LOOP_EXIT:$LASTEXITCODE" }
 } finally {
     Pop-Location

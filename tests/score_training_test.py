@@ -46,7 +46,7 @@ class PartsRules(FakeRules):
     def request(self, op, **kwargs):
         result = super().request(op, **kwargs)
         if op == "search":
-            return {**result, "seconds": 0.2, "cutoff": 2, "failed": 0, "unfinished": 0}
+            return {**result, "seconds": 0.2, "cutoff": 2, "failed": 0, "unfinished": 0, "workers": 4}
         if result.get("done"):
             for player in result["score"]["players"].values():
                 player["parts"] = {key: 0 for key in TRAIN.SCORE_PARTS}
@@ -111,6 +111,8 @@ class ScoreTests(unittest.TestCase):
             self.assertEqual(result["search"]["calls"], 1)
             self.assertEqual(result["search"]["cutoff"], 2)
             self.assertEqual(result["search"]["seconds"], 0.2)
+            self.assertEqual(result["search"]["workers"], 4)
+            self.assertEqual(result["search"]["nodesPerSecond"], 20)
             self.assertGreaterEqual(result["partsMSE"], 0)
             self.assertGreater(result["gradientNorm"], 0)
             _, checkpoint = load_checkpoint(folder / "model.pt", meta)

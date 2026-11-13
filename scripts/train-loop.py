@@ -133,9 +133,12 @@ def main():
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--generations", type=int, default=0, help="总目标代数；0 为持续运行")
+    parser.add_argument("--search-workers", default=os.environ.get("AI_SEARCH_WORKERS", "auto"),
+                        choices=["auto", *map(str, range(1, 9))], help="规则搜索工作线程数，不改变实验参数")
     args = parser.parse_args()
     if args.generations < 0:
         parser.error("generations >= 0")
+    os.environ["AI_SEARCH_WORKERS"] = args.search_workers
     config = validate(read(args.config))
     for key in ("input", "initialCheckpoint", "catalog", "weights"):
         if config.get(key):
@@ -175,6 +178,7 @@ def main():
                      "generation": 0, "history": [], "active": None,
                      "champion": None, "latest": None, "evaluatedSeeds": [], "phase": "initializing"}
         state["pid"] = os.getpid()
+        state["runtime"] = {"searchWorkersRequested": args.search_workers, "searchExecution": "persistent-route-pool-v1"}
         state.pop("error", None)
         atomic_json(state_path, state)
         try:

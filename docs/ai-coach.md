@@ -76,6 +76,26 @@ node scripts/generate-training-data.mjs --games 32 --weights data/ai-heuristic-r
 
 配置的 `threads` 默认为2，当前PyTorch为CPU版。`maxDiskGB` 默认4，输出目录达到上限后在对局边界停止；这是软上限，单局写入和预热可能超过一点。脚本不自动删除旧模型。数据输入文件不在输出目录内，其空间不计入这个限制。可调整游戏数、评估数、阈值、线程和存储预算；为避免在中断恢复时改变实验含义，改配置后使用新的 `-OutputDirectory`。
 
+### 规则搜索并行提速
+
+`threads` 仅控制PyTorch网络计算。此前耗时最大的Node规则搜索是串行的；现在规则进程用常驻工作线程并行执行独立的“候选×机会样本”，跨动作及对局复用，仍按原顺序归并估分和策略。
+
+```powershell
+# 先在完整对局边界停止，状态变成stopped后再恢复。
+.\scripts\train-ai.ps1 -Action Stop
+.\scripts\train-ai.ps1 -Action Status
+.\scripts\train-ai.ps1 -SearchWorkers 8
+
+# 测量当前副本相同局面、相同预算下的吞吐，报告只写.local且拒绝覆盖。
+node scripts/benchmark-ai-search.mjs --workers 1,2,4,8 --positions 2 --repeats 2
+```
+
+`-SearchWorkers` 支持 `auto` 或1至8；默认 `auto` 为可用逻辑线程数减2、最多4、至少1。1直接执行原串行路径；本机i7-13700实测8最快，因此本次后台续训显式使用8。Python循环同样支持 `--search-workers 8`，环境变量 `AI_SEARCH_WORKERS` 可供直接调用规则服务的Python工具使用。每个Node规则进程各有一个池，并行启动多个训练进程时应计入总线程和内存占用。
+
+线程数属于执行设置，保存在 `loop-state.json.runtime`，不改变原实验配置、编码指纹、奖励、搜索预算或训练种子，因此可在同一目录恢复检查点、优化器和已完成局数。修改搜索宽度、样本数或深度仍须另建实验。未来骰子与未知补牌仍独立重采样；并行速度不代表棋力提升，也不是完整MCTS。超时、线程退出或协议错误会明确报错并关闭池。
+
+日志查看器显示搜索工作线程数及节点/秒；旧日志缺字段时显示1线程、吞吐未知。本次固定两局面各重复两次，串行66.41秒、4线程21.61秒、8线程17.12秒，约3.07/3.88倍；所有确定性结果一致、无失败或未完成连锁。此为搜索基准，整代还包含网络、日志和选模，不能承诺整代同比加速。
+
 `input`、`catalog`、`weights`、`initialCheckpoint`、配置内 `outputDirectory` 的相对路径以仓库为基准，配置文件和命令行 `-OutputDirectory` 由调用方指定。换分支需一起复制 `scripts/`、`src/`、`data/` 及依赖，另安装Python环境并提供本机教师数据；无需固定盘符、分支名、远端URL或 `dist/`。
 
 卡牌、编码、启发式版本或输入清单改变时，原目录拒绝继续。`encoderHash` 绑定特征、环境、高分估值和攻略源码，避免漏改版本名后误载旧权重。修改这些文件后须重新生成教师数据并另建实验目录。旧文档中的v1/v2/r4/r8路径只供历史追踪。

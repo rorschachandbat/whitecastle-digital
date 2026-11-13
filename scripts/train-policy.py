@@ -186,7 +186,7 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
         search_targets = []
         search_nodes = 0
         search_stats = {"calls": 0, "terminal": 0, "cutoff": 0, "failed": 0, "unfinished": 0,
-                        "seconds": 0.0, "maxSeconds": 0.0}
+                        "seconds": 0.0, "maxSeconds": 0.0, "workers": 1}
         game_started = time.monotonic()
         diagnostics_log = Path(str(output) + ".decisions.jsonl")
         def log_event(event):
@@ -227,6 +227,7 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
                         search_stats[key] += search.get(key, 0)
                     search_stats["seconds"] += search.get("seconds", 0)
                     search_stats["maxSeconds"] = max(search_stats["maxSeconds"], search.get("seconds", 0))
+                    search_stats["workers"] = max(search_stats["workers"], search.get("workers", 1))
                 if search and search["searched"]:
                     target = torch.tensor(search["policy"], dtype=base.dtype)
                     # 搜索分布与网络混合作为实际采样策略；对该分布求对数，避免离策略更新。
@@ -300,6 +301,7 @@ def reinforce(model, optimizer, rules, games, seed_prefix, output, meta, seen_ga
         loss.backward()
         gradient_norm = nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
+        search_stats["nodesPerSecond"] = search_nodes / search_stats["seconds"] if search_stats["seconds"] > 0 else None
         result = {"game": previous + game + 1, "seed": seed, "loss": loss.item(), "entropy": entropy.item(),
                   "decisions": observation["decisions"], "score": observation["score"],
                   "searchNodes": search_nodes,
